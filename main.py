@@ -235,6 +235,14 @@ def excel_column_to_number(col):
             num = num * 26 + (ord(c.upper()) - ord('A')) + 1
     return num
 
+def week_available():
+    start, end = get_current_columns()
+    if excel_column_to_number(start) < excel_column_to_number("C"):
+        return 'SEMESTER_NOT_STARTED'
+    if excel_column_to_number(end) > excel_column_to_number("AF"):
+        return 'SEMESTER_OVER'
+    return True
+
 def get_text(text):
     file = open('texts.json', encoding='UTF-8')
     content = json.load(file)
@@ -277,11 +285,25 @@ def select_random_question(text):
     questions = text.split(';;')
     return questions[random.randint(0, len(questions) - 1)]
 
+def check_statistics_availability(id):
+    if not volunteer_exists(id):
+        return False, "NOT_REGISTERED"
+    start, end = get_current_columns()
+    if excel_column_to_number(start) < excel_column_to_number("C"):
+        return False, "SEMESTER_NOT_STARTED"
+    if excel_column_to_number(end) > excel_column_to_number("AF"):
+        return False, "SEMESTER_OVER"
+    return True, ""
+
 def ask_searchers(update, context):
-    if not volunteer_exists(update.message.chat_id):
-        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('NOT_REGISTERED')))
+    id = update.message.chat_id
+    available, message = check_statistics_availability(id)
+    if not available:
+        context.bot.send_message(chat_id=id, text=select_random_question(get_text(message))).format(
+            get_volunteer_name(id).split(" ")[1]
+        )
         return ConversationHandler.END
-    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('ASK_SEARCHERS')),
+    context.bot.send_message(chat_id=id, text=select_random_question(get_text('ASK_SEARCHERS')),
                              reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
                                                               one_time_keyboard=True, resize_keyboard=True))
     return ENTER_GOSPEL
@@ -309,12 +331,12 @@ def exit_conversation(update, context):
     context.bot.send_message(chat_id=update.message.chat_id,
                              text=select_random_question(get_text('WRITING')),
                              reply_markup=ReplyKeyboardRemove())
-    message = write_statistics_to_spreadsheets(
+    write_statistics_to_spreadsheets(
         Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id)),
                    context.user_data['searchers'], context.user_data['gospel'],
                    context.user_data['teammate']]))
     context.bot.send_message(chat_id=update.message.chat_id,
-                             text=select_random_question(get_text(message)),
+                             text=select_random_question(get_text('STATISTICS_GATHERED')),
                              reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
@@ -331,7 +353,7 @@ def enter_name(update, context):
     chat_id = update.message.chat_id
     context.user_data['name'] = update.message.text
     context.bot.send_message(chat_id=chat_id,
-                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(get_volunteer_name(id).split(" ")[1]))
+                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(get_volunteer_name(chat_id).split(" ")[1]))
     add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
     restart_jobs(context.job_queue)
     return ConversationHandler.END
@@ -341,11 +363,6 @@ def write_statistics_to_spreadsheets(volunteer: Volunteer):
     service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
     start, end = get_current_columns()
     row = get_volunteer_index(volunteer) + 2
-    if excel_column_to_number(start) < excel_column_to_number("C") :
-        return 'SEMESTER_NOT_STARTED'
-    if excel_column_to_number(end) > excel_column_to_number("AF") :
-        return 'SEMESTER_OVER'
-
     data_range = 'БЛАГОВІСТЯ (Бот)!{0}{2}:{1}{2}'.format(start, end, row)
 
     data = [volunteer.gospel, volunteer.teammate]
@@ -359,8 +376,7 @@ def write_statistics_to_spreadsheets(volunteer: Volunteer):
             values=[data]
         )
     ).execute()
-
-    return 'STATISTICS_GATHERED'
+    return
 
 
 def end_conversation(update, context):
