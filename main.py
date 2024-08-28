@@ -98,7 +98,6 @@ def get_spreadsheets_data():
 
 
 def update_volunteers(students):
-
     try:
         service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
         data_range = read_config("VOLUNTEERS_RANGE_NAME")
@@ -120,6 +119,13 @@ def update_volunteers(students):
     except HttpError as err:
         print(err)
 
+    with open('Volunteers.json', 'r+') as f:
+        f.seek(0)  # <--- should reset file position to the beginning.
+        data = []
+        for student in students:
+            data.append({'id': student.id, 'name': student.name, 'remind_statistics': student.remind_statistics})
+        json.dump(data, f, indent=4)
+        f.truncate()
 
 def add_volunteer(volunteer: Volunteer):
     service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
@@ -169,7 +175,13 @@ def is_admin(user_id: int):
 
 
 def get_volunteers():
-    return get_spreadsheets_data().get('volunteers')
+    file = open('Volunteers.json', encoding='UTF-8')
+    lines = json.load(file)
+    result = []
+    file.close()
+    for line in lines:
+        result.append(Volunteer([line.get("id"), line.get("name"), line.get("remind_statistics")]))
+    return result
 
 
 def get_volunteer_ids():
@@ -278,7 +290,6 @@ def update_texts():
         dictionary[row[0]] = row[1]
     file.write(json.dumps(dictionary, indent=4, ensure_ascii=False))
     file.close()
-
 
 def start_command(update, context):
     context.bot.send_message(chat_id=update.message.chat_id, text='hello')
@@ -458,7 +469,8 @@ def running_jobs(update, context):
 
 def main():
     update_texts()
-    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
+    update_volunteers(get_spreadsheets_data().get("volunteers"))
+    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
