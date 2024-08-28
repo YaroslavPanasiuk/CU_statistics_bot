@@ -399,13 +399,23 @@ def end_conversation(update, context):
 
 
 def reminder(context):
-    id = int(context.job.context)
+    id = int(context.job.context[0])
+    if len(context.job.context) > 1:
+        order = context.job.context[1]
+    else:
+        order = 1
+    print(order)
     if volunteer_filled_statistics(Volunteer([id, get_volunteer_name(id)])):
         return
+    message = 'REMINDER'
+    if order == 2:
+        message = 'REMINDER2'
+    if order == 3:
+        message = 'REMINDER3'
     try:
         keyboard = [[KeyboardButton(select_random_question(get_text('FILL_STATISTICS')))]]
         context.bot.send_message(chat_id=id,
-                                 text=select_random_question(get_text('REMINDER')).format(get_volunteer_name(id).split(" ")[1]),
+                                 text=select_random_question(get_text(message)).format(get_volunteer_name(id).split(" ")[1]),
                                  reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True,
                                                                   resize_keyboard=True))
         sleep(1)
@@ -420,7 +430,7 @@ def spam_volunteers(update, context):
     if not is_admin(update.message.chat_id):
         return
     for id in get_volunteer_ids():
-        context.job_queue.run_once(reminder, 0, context=id)
+        context.job_queue.run_once(reminder, 0, context=[id])
         time.sleep(2)
 
 def spam_admin(update, context):
@@ -428,7 +438,7 @@ def spam_admin(update, context):
         print("not admin")
         return
     time.sleep(4)
-    context.job_queue.run_once(reminder, 0, context=update.message.chat_id)
+    context.job_queue.run_once(reminder, 0, context=[update.message.chat_id])
     print("sent")
 
 def restart_jobs(job_queue):
@@ -437,19 +447,16 @@ def restart_jobs(job_queue):
         job.schedule_removal()
     for id in get_volunteer_ids():
         job_queue.run_daily(reminder,
-                                    time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
-                                    days=[6],
-                                    context=id, name=str(id))
+                            time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            days=[6], context=[id, 1], name=str(id))
         delay_seconds += 2
         job_queue.run_daily(reminder,
-                                    time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
-                                    days=[6],
-                                    context=id, name=str(id))
+                            time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            days=[6], context=[id, 2], name=str(id))
         delay_seconds += 2
         job_queue.run_daily(reminder,
-                                    time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
-                                    days=[6],
-                                    context=id, name=str(id))
+                            time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            days=[6], context=[id, 3], name=str(id))
         delay_seconds += 2
     print(delay_seconds)
 
@@ -463,7 +470,7 @@ def running_jobs(update, context):
         return
     reply = ''
     for job in context.job_queue.jobs():
-        reply += '{0}, {1}, {2}\n'.format(job.name, get_volunteer_name(job.context), job.next_t)
+        reply += '{0}, {1}, {2}\n'.format(job.context, get_volunteer_name(job.context[0]), job.next_t)
     context.bot.send_message(chat_id=update.message.chat_id, text=reply)
 
 
