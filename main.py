@@ -182,7 +182,7 @@ def get_volunteer_name(volunteer_id):
 
 def get_current_columns():
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
-    current_time = datetime.date(2024, 9, 16)
+    #current_time = datetime.date(2024, 9, 16)
     current_week = current_time.isocalendar().week
     columns = 2
     start_column = number_to_excel_column(current_week * 2 - 69)
