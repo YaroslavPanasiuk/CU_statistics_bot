@@ -75,29 +75,50 @@ def get_spreadsheets_data():
                                        range=read_config('QUESTIONS_RANGE_NAME')).execute().get('values', [])
         statistics = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
                                         range=read_config('VOLUNTEERS_NAME_RANGE')).execute().get('values')
+        volunteers_data = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
+                                        range=read_config('VOLUNTEERS_RANGE_NAME')).execute().get('values')
         if not questions:
             print('No questions found.')
             return
         if not statistics:
             statistics = [[]]
+        if not volunteers_data:
+            volunteers_data = [[]]
+        volunteers = []
+        for student in volunteers_data:
+            volunteers.append(Volunteer([int(student[0]), student[1]]))
         questions_df = pd.DataFrame(questions)
         statistics_df = pd.DataFrame(statistics)
         statistics_df.columns = statistics_df.iloc[0]
         statistics_df = statistics_df[2:]
-        return {'questions': questions_df, 'statistics': statistics_df}
+        return {'questions': questions_df, 'statistics': statistics_df, 'volunteers': volunteers}
 
     except HttpError as err:
         print(err)
 
 
 def update_volunteers(students):
-    with open('Volunteers.json', 'r+') as f:
-        f.seek(0)  # <--- should reset file position to the beginning.
+
+    try:
+        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        data_range = read_config("VOLUNTEERS_RANGE_NAME")
         data = []
         for student in students:
-            data.append({'id': student.id, 'name': student.name, 'remind_statistics': student.remind_statistics})
-        json.dump(data, f, indent=4)
-        f.truncate()
+            data.append([student.id, student.name])
+        for i in range(99-len(students)):
+            data.append(['', ''])
+        service.spreadsheets().values().update(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
+            valueInputOption='RAW',
+            range=data_range,
+            body=dict(
+                majorDimension='ROWS',
+                values=data
+            )
+        ).execute()
+
+    except HttpError as err:
+        print(err)
 
 
 def add_volunteer(volunteer: Volunteer):
@@ -148,13 +169,7 @@ def is_admin(user_id: int):
 
 
 def get_volunteers():
-    file = open('Volunteers.json', encoding='UTF-8')
-    lines = json.load(file)
-    result = []
-    file.close()
-    for line in lines:
-        result.append(Volunteer([line.get("id"), line.get("name"), line.get("remind_statistics")]))
-    return result
+    return get_spreadsheets_data().get('volunteers')
 
 
 def get_volunteer_ids():
@@ -204,18 +219,6 @@ def volunteer_filled_statistics(volunteer):
     except HttpError as err:
         print(err)
         return False
-
-def set_volunteer_spam(volunteer_id, reminder):
-    data = json.load(open("Volunteers.json"))
-    for volunteer in data:
-        if volunteer.get("id") == volunteer_id:
-            volunteer["remind_statistics"] = reminder
-            with open('Volunteers.json', 'r+') as f:
-                f.seek(0)
-                json.dump(data, f, indent=4)
-                f.truncate()
-            return True
-    return False
 
 def volunteer_exists(id):
     return id in get_volunteer_ids()
@@ -299,9 +302,8 @@ def ask_searchers(update, context):
     id = update.message.chat_id
     available, message = check_statistics_availability(id)
     if not available:
-        context.bot.send_message(chat_id=id, text=select_random_question(get_text(message))).format(
-            get_volunteer_name(id).split(" ")[1]
-        )
+        context.bot.send_message(chat_id=id, text=select_random_question(get_text(message)).format(
+            get_volunteer_name(id).split(" ")[1]))
         return ConversationHandler.END
     context.bot.send_message(chat_id=id, text=select_random_question(get_text('ASK_SEARCHERS')),
                              reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
@@ -352,9 +354,11 @@ def ask_name(update, context):
 def enter_name(update, context):
     chat_id = update.message.chat_id
     context.user_data['name'] = update.message.text
-    context.bot.send_message(chat_id=chat_id,
-                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(get_volunteer_name(chat_id).split(" ")[1]))
+    context.bot.send_message(chat_id=chat_id, text=select_random_question(get_text('WRITING')))
     add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
+    context.bot.send_message(chat_id=chat_id,
+                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(
+                                 get_volunteer_name(chat_id).split(" ")[-1]))
     restart_jobs(context.job_queue)
     return ConversationHandler.END
 
