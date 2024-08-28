@@ -452,7 +452,7 @@ def running_jobs(update, context):
         return
     reply = ''
     for job in context.job_queue.jobs():
-        reply += '{0}, {1}, {2}\n'.format(job.name, get_volunteer_name(job.name), job.next_t)
+        reply += '{0}, {1}, {2}\n'.format(job.name, get_volunteer_name(job.context), job.next_t)
     context.bot.send_message(chat_id=update.message.chat_id, text=reply)
 
 
