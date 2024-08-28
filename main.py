@@ -1,16 +1,11 @@
-import collections
 import json
-import math
 import os
 import os.path
 import random
-import re
 import string
 import time
-import traceback
 import datetime
 from time import sleep
-from turtledemo.penrose import start
 
 import pytz
 import pandas as pd
