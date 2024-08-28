@@ -203,7 +203,7 @@ def volunteer_filled_statistics(volunteer):
 
     except HttpError as err:
         print(err)
-    return False
+        return False
 
 def set_volunteer_spam(volunteer_id, reminder):
     data = json.load(open("Volunteers.json"))
@@ -438,7 +438,7 @@ def running_jobs(update, context):
 
 def main():
     update_texts()
-    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
+    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
