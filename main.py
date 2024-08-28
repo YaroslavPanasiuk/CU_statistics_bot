@@ -331,7 +331,7 @@ def enter_name(update, context):
     chat_id = update.message.chat_id
     context.user_data['name'] = update.message.text
     context.bot.send_message(chat_id=chat_id,
-                             text=select_random_question(get_text('REGISTRATION_COMPLETE')))
+                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(get_volunteer_name(id).split(" ")[1]))
     add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
     restart_jobs(context.job_queue)
     return ConversationHandler.END
@@ -373,7 +373,8 @@ def reminder(context):
         return
     try:
         keyboard = [[KeyboardButton(select_random_question(get_text('FILL_STATISTICS')))]]
-        context.bot.send_message(chat_id=id, text=select_random_question(get_text('REMINDER')),
+        context.bot.send_message(chat_id=id,
+                                 text=select_random_question(get_text('REMINDER')).format(get_volunteer_name(id).split(" ")[1]),
                                  reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True,
                                                                   resize_keyboard=True))
         sleep(1)
@@ -436,9 +437,8 @@ def running_jobs(update, context):
 
 
 def main():
-    print("start")
     update_texts()
-    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
+    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
