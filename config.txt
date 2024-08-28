@@ -1,0 +1,18 @@
+BOT_TOKEN = 6603996269:AAH_TVprU0WMbyIlHHMSNLB9AA0JBUvrfWM
+SCOPES = https://www.googleapis.com/auth/spreadsheets
+SAMPLE_SPREADSHEET_ID = 1ecxqD6MBBcpscJkXwdWSKakKEjh28Sbzs8NIBrH0s2A
+SAMPLE_SPREADSHEET_ID_OLD = 1g6Je3nP2JK-iV5TZKV9qPaJ6UTlitIqL8ujCIiSRyEg
+QUESTIONS_RANGE_NAME = Аркуш1!A1:B100
+VOLUNTEERS_RANGE_NAME = Аркуш2!A1:B100
+VOLUNTEERS_NAME_RANGE = БЛАГОВІСТЯ (Бот)!B3:B45
+STATISTICS_RANGE = БЛАГОВІСТЯ (Бот)!B3:B45
+MAX_VOLUNTEERS = 42
+ADMIN_ID = 388098248
+ADMIN_IDS = 388098248, 801356333
+
+start - зареєструватися або змінити ім'я
+menu - переглянути список команд і можливості бота
+send_statistics - надіслати статистику за тиждень
+start_spamming - я нагадуватиму щотижня про заповнення статистики
+stop_spamming - я не турбуватиму тебе
+
