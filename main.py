@@ -307,33 +307,33 @@ def check_statistics_availability(id):
         return False, "SEMESTER_OVER"
     return True, ""
 
-def ask_searchers(update, context):
+def question_1(update, context):
     id = update.message.chat_id
     available, message = check_statistics_availability(id)
     if not available:
         context.bot.send_message(chat_id=id, text=select_random_question(get_text(message)).format(
             get_volunteer_name(id).split(" ")[1]))
         return ConversationHandler.END
-    context.bot.send_message(chat_id=id, text=select_random_question(get_text('ASK_SEARCHERS')),
+    context.bot.send_message(chat_id=id, text=select_random_question(get_text('QUESTION_1')),
                              reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
                                                               one_time_keyboard=True, resize_keyboard=True))
     return ENTER_GOSPEL
 
 
-def ask_gospel(update, context):
+def question_2(update, context):
     context.user_data['searchers'] = update.message.text
     context.bot.send_message(chat_id=update.message.chat_id,
-                             text=select_random_question(get_text('ASK_GOSPEL')),
+                             text=select_random_question(get_text('QUESTION_2')),
                              reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
                                                               one_time_keyboard=True, resize_keyboard=True))
     return ENTER_TEAMMATE
 
 
-def ask_teammate(update, context):
-    keyboard = [[KeyboardButton(get_text('YES')), KeyboardButton(get_text('NO'))]]
+def question_3(update, context):
     context.user_data['gospel'] = update.message.text
-    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('ASK_TEAMMATE')),
-                             reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True))
+    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('QUESTION_3')),
+                             reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
+                                                              one_time_keyboard=True, resize_keyboard=True))
     return EXIT_CONVERSATION
 
 
@@ -378,7 +378,7 @@ def write_statistics_to_spreadsheets(volunteer: Volunteer):
     row = get_volunteer_index(volunteer) + 2
     data_range = 'БЛАГОВІСТЯ (Бот)!{0}{2}:{1}{2}'.format(start, end, row)
 
-    data = [volunteer.gospel, volunteer.teammate]
+    data = [volunteer.searchers, volunteer.gospel, volunteer.teammate]
 
     service.spreadsheets().values().update(
         spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
@@ -488,11 +488,11 @@ def main():
         fallbacks=[]
     )
     gather_statistics_conversation_handler = ConversationHandler(
-        entry_points=[CommandHandler('send_statistics', ask_searchers),
-                      MessageHandler(Filters.text(get_text('FILL_STATISTICS').split(';;')), ask_searchers)],
+        entry_points=[CommandHandler('send_statistics', question_1),
+                      MessageHandler(Filters.text(get_text('FILL_STATISTICS').split(';;')), question_1)],
         states={
-            ENTER_GOSPEL: [MessageHandler(Filters.text & (~ Filters.command), ask_gospel)],
-            ENTER_TEAMMATE: [MessageHandler(Filters.text & (~ Filters.command), ask_teammate)],
+            ENTER_GOSPEL: [MessageHandler(Filters.text & (~ Filters.command), question_2)],
+            ENTER_TEAMMATE: [MessageHandler(Filters.text & (~ Filters.command), question_3)],
             EXIT_CONVERSATION: [MessageHandler(Filters.text & (~ Filters.command), exit_conversation)]
         },
         fallbacks=[CommandHandler('finish', end_conversation)]
