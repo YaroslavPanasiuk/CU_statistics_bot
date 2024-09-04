@@ -209,11 +209,11 @@ def get_volunteer_name(volunteer_id):
 
 def get_current_columns():
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
-    #current_time = datetime.date(2024, 9, 16)
+    current_time = datetime.date(2024, 9, 16)
     current_week = current_time.isocalendar().week
-    columns = 2
-    start_column = number_to_excel_column(current_week * 2 - 69)
-    end_column = number_to_excel_column(current_week * 2 + columns - 70)
+    columns = 3
+    start_column = number_to_excel_column(current_week * columns - 69)
+    end_column = number_to_excel_column(current_week * columns + columns - 70)
     return start_column, end_column
 
 def volunteer_filled_statistics(volunteer):
@@ -406,6 +406,8 @@ def reminder(context):
         order = 1
     print(order)
     if volunteer_filled_statistics(Volunteer([id, get_volunteer_name(id)])):
+        context.bot.send_message(chat_id=int(read_config("ADMIN_ID")),
+                                 text="{0} already filled statistics".format(get_volunteer_name(id)))
         return
     message = 'REMINDER'
     if order == 2:
@@ -417,7 +419,7 @@ def reminder(context):
         context.bot.send_message(chat_id=id,
                                  text=select_random_question(get_text(message)).format(get_volunteer_name(id).split(" ")[1]),
                                  reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True,
-                                                                  resize_keyboard=True))
+                                                                  resize_keyboard=True), parse_mode=ParseMode.HTML)
         sleep(1)
         context.bot.send_message(chat_id=int(read_config("ADMIN_ID")),
                                  text="reminded {0}".format(get_volunteer_name(id)))
@@ -434,12 +436,13 @@ def spam_volunteers(update, context):
         time.sleep(2)
 
 def spam_admin(update, context):
-    if not is_admin(update.message.chat_id):
+    id = update.message.chat_id
+    if not is_admin(id):
         print("not admin")
         return
-    time.sleep(4)
-    context.job_queue.run_once(reminder, 0, context=[update.message.chat_id])
-    print("sent")
+    time.sleep(2)
+    context.job_queue.run_once(reminder, 0, context=[id, 3])
+    print("sent to {0}".format(id))
 
 def restart_jobs(job_queue):
     delay_seconds = 0
@@ -447,21 +450,21 @@ def restart_jobs(job_queue):
         job.schedule_removal()
     for id in get_volunteer_ids():
         job_queue.run_daily(reminder,
-                            time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
                             days=[6], context=[id, 1], name=str(id))
         delay_seconds += 2
         job_queue.run_daily(reminder,
-                            time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
                             days=[6], context=[id, 2], name=str(id))
         delay_seconds += 2
         job_queue.run_daily(reminder,
-                            time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60),
+                            time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
                             days=[6], context=[id, 3], name=str(id))
         delay_seconds += 2
     print(delay_seconds)
 
 def show_menu(update, context):
-    context.bot.send_message(chat_id=update.message.chat_id, text=get_text('MENU'))
+    context.bot.send_message(chat_id=update.message.chat_id, text=get_text('MENU'), parse_mode=ParseMode.HTML)
 
 
 def running_jobs(update, context):
