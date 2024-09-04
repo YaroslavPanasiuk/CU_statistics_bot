@@ -208,12 +208,17 @@ def get_volunteer_name(volunteer_id):
     return 'noName'
 
 def get_current_columns():
+    first_week = 36
+    first_column = 3
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
-    current_time = datetime.date(2024, 9, 16)
+    #current_time = datetime.date(2024, 12, 15)
     current_week = current_time.isocalendar().week
+    print(current_week)
     columns = 3
-    start_column = number_to_excel_column(current_week * columns - 69)
-    end_column = number_to_excel_column(current_week * columns + columns - 70)
+    start_column = number_to_excel_column((current_week-first_week) * columns + first_column)
+    end_column = number_to_excel_column((current_week-first_week + 1) * columns + first_column - 1)
+    print(start_column)
+    print(end_column)
     return start_column, end_column
 
 def volunteer_filled_statistics(volunteer):
@@ -250,13 +255,6 @@ def excel_column_to_number(col):
             num = num * 26 + (ord(c.upper()) - ord('A')) + 1
     return num
 
-def week_available():
-    start, end = get_current_columns()
-    if excel_column_to_number(start) < excel_column_to_number("C"):
-        return 'SEMESTER_NOT_STARTED'
-    if excel_column_to_number(end) > excel_column_to_number("AF"):
-        return 'SEMESTER_OVER'
-    return True
 
 def get_text(text):
     file = open('texts.json', encoding='UTF-8')
@@ -305,7 +303,7 @@ def check_statistics_availability(id):
     start, end = get_current_columns()
     if excel_column_to_number(start) < excel_column_to_number("C"):
         return False, "SEMESTER_NOT_STARTED"
-    if excel_column_to_number(end) > excel_column_to_number("AF"):
+    if excel_column_to_number(end) > excel_column_to_number("AU"):
         return False, "SEMESTER_OVER"
     return True, ""
 
@@ -480,7 +478,7 @@ def running_jobs(update, context):
 def main():
     update_texts()
     update_volunteers(get_spreadsheets_data().get("volunteers"))
-    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
+    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
