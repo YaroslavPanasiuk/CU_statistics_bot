@@ -20,7 +20,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-(ENTER_SEARCHERS, ENTER_GOSPEL, ENTER_TEAMMATE, EXIT_CONVERSATION, ENTER_NAME) = range(5)
+(ENTER_SEARCHERS, ENTER_GOSPEL, ENTER_TEAMMATE, EXIT_CONVERSATION, ENTER_NAME, ASK_NAME) = range(6)
 
 class Volunteer:
     def __init__(self, values: []):
@@ -213,12 +213,9 @@ def get_current_columns():
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
     #current_time = datetime.date(2024, 12, 15)
     current_week = current_time.isocalendar().week
-    print(current_week)
     columns = 3
     start_column = number_to_excel_column((current_week-first_week) * columns + first_column)
     end_column = number_to_excel_column((current_week-first_week + 1) * columns + first_column - 1)
-    print(start_column)
-    print(end_column)
     return start_column, end_column
 
 def volunteer_filled_statistics(volunteer):
@@ -321,6 +318,11 @@ def question_1(update, context):
 
 
 def question_2(update, context):
+    if not update.message.text.isnumeric():
+        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
+                                                                  one_time_keyboard=True, resize_keyboard=True))
+        return ENTER_GOSPEL
     context.user_data['searchers'] = update.message.text
     context.bot.send_message(chat_id=update.message.chat_id,
                              text=select_random_question(get_text('QUESTION_2')),
@@ -330,6 +332,11 @@ def question_2(update, context):
 
 
 def question_3(update, context):
+    if not update.message.text.isnumeric():
+        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
+                                                                  one_time_keyboard=True, resize_keyboard=True))
+        return ENTER_TEAMMATE
     context.user_data['gospel'] = update.message.text
     context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('QUESTION_3')),
                              reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
@@ -338,6 +345,11 @@ def question_3(update, context):
 
 
 def exit_conversation(update, context):
+    if not update.message.text.isnumeric():
+        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
+                                                                  one_time_keyboard=True, resize_keyboard=True))
+        return EXIT_CONVERSATION
     context.user_data['teammate'] = update.message.text
     context.bot.send_message(chat_id=update.message.chat_id,
                              text=select_random_question(get_text('WRITING')),
@@ -362,6 +374,9 @@ def ask_name(update, context):
 
 def enter_name(update, context):
     chat_id = update.message.chat_id
+    if len(update.message.text.split(" ")) != 2:
+        context.bot.send_message(chat_id=chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NAME')).format(update.message.text))
+        return ENTER_NAME
     context.user_data['name'] = update.message.text
     context.bot.send_message(chat_id=chat_id, text=select_random_question(get_text('WRITING')))
     add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
@@ -402,7 +417,6 @@ def reminder(context):
         order = context.job.context[1]
     else:
         order = 1
-    print(order)
     if volunteer_filled_statistics(Volunteer([id, get_volunteer_name(id)])):
         context.bot.send_message(chat_id=int(read_config("ADMIN_ID")),
                                  text="{0} already filled statistics".format(get_volunteer_name(id)))
@@ -459,7 +473,6 @@ def restart_jobs(job_queue):
                             time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
                             days=[6], context=[id, 3], name=str(id))
         delay_seconds += 2
-    print(delay_seconds)
 
 def show_menu(update, context):
     context.bot.send_message(chat_id=update.message.chat_id, text=get_text('MENU'), parse_mode=ParseMode.HTML)
@@ -484,12 +497,13 @@ def main():
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
     register_conversation_handler = ConversationHandler(
         entry_points=[CommandHandler('start', ask_name)],
-        states={ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), enter_name)]},
+        states={ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), enter_name)],
+                ASK_NAME: [MessageHandler(Filters.text & (~ Filters.command), ask_name)]},
         fallbacks=[]
     )
     gather_statistics_conversation_handler = ConversationHandler(
         entry_points=[CommandHandler('send_statistics', question_1),
-                      MessageHandler(Filters.text(get_text('FILL_STATISTICS').split(';;')), question_1)],
+                      MessageHandler(Filters.text(select_random_question(get_text('FILL_STATISTICS'))), question_1)],
         states={
             ENTER_GOSPEL: [MessageHandler(Filters.text & (~ Filters.command), question_2)],
             ENTER_TEAMMATE: [MessageHandler(Filters.text & (~ Filters.command), question_3)],

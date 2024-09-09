@@ -68,5 +68,10 @@
         "id": 635401228,
         "name": "\u0420\u0443\u0446\u044c\u043a\u0438\u0439 \u041c\u0438\u043a\u0438\u0442\u0430",
         "remind_statistics": true
+    },
+    {
+        "id": 403702728,
+        "name": "\u0412\u043e\u043b\u043a\u043e\u0432\u0430 \u0422\u0430\u043d\u044f",
+        "remind_statistics": true
     }
 ]
