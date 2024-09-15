@@ -443,17 +443,23 @@ def reminder(context):
 def spam_volunteers(update, context):
     if not is_admin(update.message.chat_id):
         return
+    order = 1
+    if len(context.args) == 1 and context.args[0] is int:
+        order = context.args[0]
     for id in get_volunteer_ids():
-        context.job_queue.run_once(reminder, 0, context=[id])
+        context.job_queue.run_once(reminder, 0, context=[id, order])
         time.sleep(2)
 
 def spam_admin(update, context):
     id = update.message.chat_id
+    order = 3
+    if len(context.args) == 1 and context.args[0] is int:
+        order = context.args[0]
     if not is_admin(id):
         print("not admin")
         return
     time.sleep(2)
-    context.job_queue.run_once(reminder, 0, context=[id, 3])
+    context.job_queue.run_once(reminder, 0, context=[id, order])
     print("sent to {0}".format(id))
 
 def restart_jobs(job_queue):
@@ -491,7 +497,7 @@ def running_jobs(update, context):
 def main():
     update_texts()
     update_volunteers(get_spreadsheets_data().get("volunteers"))
-    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
+    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
