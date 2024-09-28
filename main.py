@@ -211,8 +211,9 @@ def get_current_columns():
     first_week = 36
     first_column = 3
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
-    #current_time = datetime.date(2024, 12, 15)
-    current_week = current_time.isocalendar().week
+    #current_time = datetime.date(2024, 9, 23)
+    yesterday = current_time + datetime.timedelta(days=-1)
+    current_week = yesterday.isocalendar().week
     columns = 3
     start_column = number_to_excel_column((current_week-first_week) * columns + first_column)
     end_column = number_to_excel_column((current_week-first_week + 1) * columns + first_column - 1)
@@ -491,13 +492,16 @@ def running_jobs(update, context):
     reply = ''
     for job in context.job_queue.jobs():
         reply += '{0}, {1}, {2}\n'.format(job.context, get_volunteer_name(job.context[0]), job.next_t)
+        if len(reply) > 3500:
+            context.bot.send_message(chat_id=update.message.chat_id, text=reply)
+            reply = ''
     context.bot.send_message(chat_id=update.message.chat_id, text=reply)
 
 
 def main():
     update_texts()
     update_volunteers(get_spreadsheets_data().get("volunteers"))
-    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
+    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
