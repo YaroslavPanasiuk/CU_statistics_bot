@@ -10,6 +10,7 @@ STATISTICS_RANGE = БЛАГОВІСТЯ (Бот)!B3:B45
 MAX_VOLUNTEERS = 42
 ADMIN_ID = 388098248
 ADMIN_IDS = 388098248, 801356333
+THRESHOLD = wednesday
 
 start - зареєструватися або змінити ім'я
 menu - переглянути список команд і можливості бота

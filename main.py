@@ -21,6 +21,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 (ENTER_SEARCHERS, ENTER_GOSPEL, ENTER_TEAMMATE, EXIT_CONVERSATION, ENTER_NAME, ASK_NAME) = range(6)
+weekdays = {"monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6, "sunday": 0}
 
 class Volunteer:
     def __init__(self, values: []):
@@ -212,8 +213,8 @@ def get_current_columns():
     first_column = 3
     current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
     #current_time = datetime.date(2024, 9, 23)
-    yesterday = current_time + datetime.timedelta(days=-1)
-    current_week = yesterday.isocalendar().week
+    threshold_day = current_time + datetime.timedelta(days=-weekdays.get(read_config("THRESHOLD")))
+    current_week = threshold_day.isocalendar().week
     columns = 3
     start_column = number_to_excel_column((current_week-first_week) * columns + first_column)
     end_column = number_to_excel_column((current_week-first_week + 1) * columns + first_column - 1)
@@ -427,6 +428,10 @@ def reminder(context):
         message = 'REMINDER2'
     if order == 3:
         message = 'REMINDER3'
+    if order == 4:
+        message = 'REMINDER_LATE'
+    if order == 5:
+        message = 'REMINDER_SORRY'
     try:
         keyboard = [[KeyboardButton(select_random_question(get_text('FILL_STATISTICS')))]]
         context.bot.send_message(chat_id=id,
@@ -445,17 +450,18 @@ def spam_volunteers(update, context):
     if not is_admin(update.message.chat_id):
         return
     order = 1
-    if len(context.args) == 1 and context.args[0] is int:
-        order = context.args[0]
+    if len(context.args) == 1:
+        order = int(context.args[0])
     for id in get_volunteer_ids():
         context.job_queue.run_once(reminder, 0, context=[id, order])
         time.sleep(2)
 
 def spam_admin(update, context):
     id = update.message.chat_id
+    print(id)
     order = 3
-    if len(context.args) == 1 and context.args[0] is int:
-        order = context.args[0]
+    if len(context.args) == 1:
+        order = int(context.args[0])
     if not is_admin(id):
         print("not admin")
         return
@@ -501,7 +507,8 @@ def running_jobs(update, context):
 def main():
     update_texts()
     update_volunteers(get_spreadsheets_data().get("volunteers"))
-    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
+    print("updated")
+    updater = Updater(read_config("BOT_TOKEN"), use_context=True)
     dispatcher = updater.dispatcher
     restart_jobs(updater.job_queue)
     # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
