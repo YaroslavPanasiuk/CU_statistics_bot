@@ -6,6 +6,9 @@ import string
 import time
 import datetime
 from time import sleep
+import socket
+from urllib.parse import quote
+import requests
 
 import pytz
 import pandas as pd
@@ -58,44 +61,77 @@ def connect_to_spreadsheets():
     creds = None
     scopes = [read_config("SCOPES")]
     if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', scopes)
+        try:
+            creds = Credentials.from_authorized_user_file('token.json', scopes)
+        except Exception as e:
+            print(f"Error loading credentials: {e}")
+            creds = None
+    
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                print(f"Error refreshing credentials: {e}")
+                creds = None
         else:
-            flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', scopes)
-            creds = flow.run_local_server(port=0)
-        with open('token.json', 'w') as token:
-            token.write(creds.to_json())
+            try:
+                flow = InstalledAppFlow.from_client_secrets_file('credentials.json', scopes)
+                creds = flow.run_local_server(port=0)
+            except Exception as e:
+                print(f"Error during OAuth flow: {e}")
+                raise
+    
     return creds
 
 
-def get_spreadsheets_data():
-    try:
-        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-        sheet = service.spreadsheets()
+def get_sheets_values(spreadsheet_id, range_name):
+    """Get values from Google Sheets using requests directly."""
+    creds = connect_to_spreadsheets()
+    if not creds or not creds.valid:
+        print("No valid credentials available")
+        return None
         
+    access_token = creds.token
+    # URL encode the range name to handle special characters
+    encoded_range = quote(range_name)
+    url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{encoded_range}"
+    
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    
+    try:
+        # Force IPv4 to avoid IPv6 issues
+        original_getaddrinfo = socket.getaddrinfo
+        socket.getaddrinfo = lambda *args, **kwargs: original_getaddrinfo(*args, **kwargs)[:1]  # Force IPv4
+        response = requests.get(url, headers=headers, timeout=30)
+        socket.getaddrinfo = original_getaddrinfo  # Restore original function
+    except Exception as e:
+        print(f"Request to Sheets API failed: {e}")
+        return None
+        
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Sheets API error: {response.status_code} - {response.text}")
+        return None
+
+
+def get_spreadsheets_data():
+    try:        
         # Get questions
-        questions_result = sheet.values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-            range=read_config('QUESTIONS_RANGE_NAME')
-        ).execute()
+        questions_result = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID_OLD"), read_config("QUESTIONS_RANGE_NAME"))
         questions = questions_result.get('values', [])
         
         # Get statistics
-        statistics_result = sheet.values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=read_config('VOLUNTEERS_NAME_RANGE')
-        ).execute()
+        statistics_result = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID"), read_config("VOLUNTEERS_NAME_RANGE"))
         statistics = statistics_result.get('values', [])
         
         # Get volunteers data
-        volunteers_result = sheet.values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-            range=read_config('VOLUNTEERS_RANGE_NAME')
-        ).execute()
-        volunteers_data = volunteers_result.get('values', [])
+        volunteeers_result = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID_OLD"), read_config("VOLUNTEERS_RANGE_NAME"))
+        volunteers_data = volunteeers_result.get('values', [])
         
         if not questions:
             print('No questions found.')
@@ -129,9 +165,6 @@ def get_spreadsheets_data():
 
 def get_statistics_from_spreadsheets(volunteer: Volunteer, weeks: list[int]):
     try:
-        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-        sheet = service.spreadsheets()
-
         start = get_columns(weeks[0])[0]
         end = get_columns(weeks[-1])[-1]
         row = get_volunteer_index(volunteer)
@@ -141,10 +174,7 @@ def get_statistics_from_spreadsheets(volunteer: Volunteer, weeks: list[int]):
             
         data_range = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
         # Get questions
-        statistics = sheet.values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=data_range
-        ).execute().get('values', [[]])[0]
+        statistics = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID"), data_range).get('values', [[]])[0]
         while len(statistics) < int(floor(len(weeks)*1.5)):
             statistics.append("")
         return statistics
@@ -159,24 +189,40 @@ def get_statistics_from_spreadsheets(volunteer: Volunteer, weeks: list[int]):
 
 def update_volunteers(students):
     try:
-        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-        data_range = read_config("VOLUNTEERS_RANGE_NAME")
+        creds = connect_to_spreadsheets()
+        if not creds:
+            print("No credentials for adding student")
+            return            
+        access_token = creds.token
+        spreadsheet_id = read_config("SAMPLE_SPREADSHEET_ID_OLD")
+
         data = []
         for student in students:
             data.append([student.id, student.name])
         for i in range(99 - len(students)):
             data.append(['', ''])
             
-        request_body = {
-            'values': data
+        range_name = f"Аркуш2!A2:B100"
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_name}?valueInputOption=USER_ENTERED"
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
         }
         
-        service.spreadsheets().values().update(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-            range=data_range,
-            valueInputOption='RAW',
-            body=request_body
-        ).execute()
+        body = {
+            "values": data
+        }
+
+        original_getaddrinfo = socket.getaddrinfo
+        socket.getaddrinfo = lambda *args, **kwargs: original_getaddrinfo(*args, **kwargs)[:1]
+        response = requests.put(url, headers=headers, json=body, timeout=30)
+        socket.getaddrinfo = original_getaddrinfo
+
+        if response.status_code == 200:
+            print("Volunteer names updated successfully in spreadsheet")
+        else:
+            print(f"Failed to update volunteer names: {response.status_code} - {response.text}")
 
     except HttpError as err:
         print(f"HTTP Error updating volunteers: {err}")
@@ -194,7 +240,7 @@ def update_volunteers(students):
 
 def add_volunteer(volunteer: Volunteer):
     try:
-        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        creds = connect_to_spreadsheets()
         students = get_volunteers()
         volunteer_exists = False
         
@@ -212,20 +258,30 @@ def add_volunteer(volunteer: Volunteer):
         student_names = [student.name for student in students]
         while len(student_names) < int(read_config('MAX_VOLUNTEERS')):
             student_names.append('')
-
-        data_range = f'Благовістя 2025!B3:B{len(student_names) + 2}'
+            
+        access_token = creds.token
+        spreadsheet_id = read_config("SAMPLE_SPREADSHEET_ID")
+        range_name = f"B3:B{len(student_names) + 2}"
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_name}?valueInputOption=USER_ENTERED"
         
-        request_body = {
-            'values': [student_names],
-            'majorDimension': 'COLUMNS'
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
         }
         
-        service.spreadsheets().values().update(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=data_range,
-            valueInputOption='RAW',
-            body=request_body
-        ).execute()
+        body = {
+            "values": [[name] for name in student_names]
+        }
+
+        original_getaddrinfo = socket.getaddrinfo
+        socket.getaddrinfo = lambda *args, **kwargs: original_getaddrinfo(*args, **kwargs)[:1]
+        response = requests.put(url, headers=headers, json=body, timeout=30)
+        socket.getaddrinfo = original_getaddrinfo
+
+        if response.status_code == 200:
+            print("Volunteer names updated successfully in spreadsheet")
+        else:
+            print(f"Failed to update volunteer names: {response.status_code} - {response.text}")
         
     except Exception as e:
         print(f"Error adding volunteer: {e}")
@@ -234,10 +290,7 @@ def add_volunteer(volunteer: Volunteer):
 def get_volunteer_index(volunteer: Volunteer):
     try:
         service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-        result = service.spreadsheets().values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=read_config("VOLUNTEERS_NAME_RANGE")
-        ).execute()
+        result = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID"), read_config("VOLUNTEERS_NAME_RANGE"))
         
         student_names = result.get('values', [])
         final_names = []
@@ -340,10 +393,7 @@ def volunteer_filled_statistics(volunteer):
             
         range_name = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
         
-        result = service.spreadsheets().values().get(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=range_name
-        ).execute()
+        result = get_sheets_values(read_config("SAMPLE_SPREADSHEET_ID"), range_name)
         
         statistics = result.get('values', [])
         return bool(statistics and any(statistics[0]))
@@ -667,7 +717,14 @@ async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def write_statistics_to_spreadsheets(volunteer: Volunteer, week = None):
     try:
-        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        creds = connect_to_spreadsheets()
+        if not creds:
+            print("No credentials for adding student")
+            return
+            
+        access_token = creds.token
+        spreadsheet_id = read_config("SAMPLE_SPREADSHEET_ID")
+
         start, end = get_current_columns()
         if week is None:
             start, end = get_current_columns()
@@ -678,21 +735,32 @@ def write_statistics_to_spreadsheets(volunteer: Volunteer, week = None):
             print(f"Volunteer {volunteer.name} not found in spreadsheet")
             return
             
-        data_range = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
         data = [volunteer.searchers]
         if start != end:
             data.append(volunteer.gospel)
 
-        request_body = {
-            'values': [data]
+        range_name = f"Благовістя 2025!{start}{row + 2}:{end}{row + 2}"
+        url = f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}/values/{range_name}?valueInputOption=USER_ENTERED"
+        
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
         }
         
-        service.spreadsheets().values().update(
-            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-            range=data_range,
-            valueInputOption='RAW',
-            body=request_body
-        ).execute()
+        body = {
+            "values": [data]
+        }
+
+        original_getaddrinfo = socket.getaddrinfo
+        socket.getaddrinfo = lambda *args, **kwargs: original_getaddrinfo(*args, **kwargs)[:1]
+        response = requests.put(url, headers=headers, json=body, timeout=30)
+        socket.getaddrinfo = original_getaddrinfo
+
+        if response.status_code == 200:
+            print(f"Volunteer {volunteer.name} successfully updated statistics in spreadsheet")
+        else:
+            print(f"Failed to update volunteer {volunteer.name}'s statistics: {response.status_code} - {response.text}")
+
         
     except Exception as e:
         print(f"Error writing statistics to spreadsheet: {e}")
