@@ -9,10 +9,13 @@ from time import sleep
 
 import pytz
 import pandas as pd
+from math import floor
+import re
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, ParseMode, \
+from telegram.constants import ParseMode
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup, \
     ReplyKeyboardRemove, Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackQueryHandler, ConversationHandler, \
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ConversationHandler, \
     ContextTypes
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -20,7 +23,7 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-(ENTER_SEARCHERS, ENTER_GOSPEL, ENTER_TEAMMATE, EXIT_CONVERSATION, ENTER_NAME, ASK_NAME) = range(6)
+(ENTER_SEARCHERS, ENTER_GOSPEL, ENTER_TEAMMATE, EXIT_CONVERSATION, ENTER_NAME, ASK_NAME, EXIT_CONVERSATION_EARLY) = range(7)
 weekdays = {"monday": 1, "tuesday": 2, "wednesday": 3, "thursday": 4, "friday": 5, "saturday": 6, "sunday": 0}
 
 class Volunteer:
@@ -34,7 +37,7 @@ class Volunteer:
         if len(values) > 3:
             self.searchers = values[2]
             self.gospel = values[3]
-            self.teammate = values[4]
+            #self.teammate = values[4]
 
 
 def read_config(value) -> str:
@@ -72,30 +75,86 @@ def get_spreadsheets_data():
     try:
         service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
         sheet = service.spreadsheets()
-        questions = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-                                       range=read_config('QUESTIONS_RANGE_NAME')).execute().get('values', [])
-        statistics = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-                                        range=read_config('VOLUNTEERS_NAME_RANGE')).execute().get('values')
-        volunteers_data = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-                                        range=read_config('VOLUNTEERS_RANGE_NAME')).execute().get('values')
+        
+        # Get questions
+        questions_result = sheet.values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
+            range=read_config('QUESTIONS_RANGE_NAME')
+        ).execute()
+        questions = questions_result.get('values', [])
+        
+        # Get statistics
+        statistics_result = sheet.values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=read_config('VOLUNTEERS_NAME_RANGE')
+        ).execute()
+        statistics = statistics_result.get('values', [])
+        
+        # Get volunteers data
+        volunteers_result = sheet.values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
+            range=read_config('VOLUNTEERS_RANGE_NAME')
+        ).execute()
+        volunteers_data = volunteers_result.get('values', [])
+        
         if not questions:
             print('No questions found.')
-            return
+            return None
+            
         if not statistics:
             statistics = [[]]
         if not volunteers_data:
             volunteers_data = [[]]
+            
         volunteers = []
         for student in volunteers_data:
-            volunteers.append(Volunteer([int(student[0]), student[1]]))
+            if student:  # Check if student list is not empty
+                volunteers.append(Volunteer([int(student[0]), student[1]]))
+                
         questions_df = pd.DataFrame(questions)
         statistics_df = pd.DataFrame(statistics)
-        statistics_df.columns = statistics_df.iloc[0]
-        statistics_df = statistics_df[2:]
+        if not statistics_df.empty:
+            statistics_df.columns = statistics_df.iloc[0]
+            statistics_df = statistics_df[2:]
+            
         return {'questions': questions_df, 'statistics': statistics_df, 'volunteers': volunteers}
 
     except HttpError as err:
-        print(err)
+        print(f"HTTP Error: {err}")
+        return None
+    except Exception as e:
+        print(f"Error getting spreadsheet data: {e}")
+        return None
+
+
+def get_statistics_from_spreadsheets(volunteer: Volunteer, weeks: list[int]):
+    try:
+        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        sheet = service.spreadsheets()
+
+        start = get_columns(weeks[0])[0]
+        end = get_columns(weeks[-1])[-1]
+        row = get_volunteer_index(volunteer)
+        if row is None:
+            print(f"Volunteer {volunteer.name} not found in spreadsheet")
+            return
+            
+        data_range = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
+        # Get questions
+        statistics = sheet.values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=data_range
+        ).execute().get('values', [[]])[0]
+        while len(statistics) < int(floor(len(weeks)*1.5)):
+            statistics.append("")
+        return statistics
+    
+    except HttpError as err:
+        print(f"HTTP Error: {err}")
+        return None
+    except Exception as e:
+        print(f"Error getting spreadsheet data: {e}")
+        return None
 
 
 def update_volunteers(students):
@@ -105,69 +164,95 @@ def update_volunteers(students):
         data = []
         for student in students:
             data.append([student.id, student.name])
-        for i in range(99-len(students)):
+        for i in range(99 - len(students)):
             data.append(['', ''])
+            
+        request_body = {
+            'values': data
+        }
+        
         service.spreadsheets().values().update(
             spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID_OLD"),
-            valueInputOption='RAW',
             range=data_range,
-            body=dict(
-                majorDimension='ROWS',
-                values=data
-            )
+            valueInputOption='RAW',
+            body=request_body
         ).execute()
 
     except HttpError as err:
-        print(err)
+        print(f"HTTP Error updating volunteers: {err}")
+    except Exception as e:
+        print(f"Error updating volunteers: {e}")
 
-    with open('Volunteers.json', 'r+') as f:
-        f.seek(0)  # <--- should reset file position to the beginning.
+    with open('data/Volunteers.json', 'r+') as f:
+        f.seek(0)
         data = []
         for student in students:
             data.append({'id': student.id, 'name': student.name, 'remind_statistics': student.remind_statistics})
         json.dump(data, f, indent=4)
         f.truncate()
 
+
 def add_volunteer(volunteer: Volunteer):
-    service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-    students = get_volunteers()
-    volunteer_exists = False
-    for student in students:
-        if student.id == volunteer.id:
-            student.name = volunteer.name
-            volunteer_exists = True
-            break
-    if not volunteer_exists:
-        students.append(Volunteer([volunteer.id, volunteer.name]))
-    update_volunteers(students)
+    try:
+        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        students = get_volunteers()
+        volunteer_exists = False
+        
+        for student in students:
+            if student.id == volunteer.id:
+                student.name = volunteer.name
+                volunteer_exists = True
+                break
+                
+        if not volunteer_exists:
+            students.append(Volunteer([volunteer.id, volunteer.name]))
+            
+        update_volunteers(students)
 
-    student_names = [student.name for student in students]
-    while len(student_names) < int(read_config('MAX_VOLUNTEERS')):
-        student_names.append('')
+        student_names = [student.name for student in students]
+        while len(student_names) < int(read_config('MAX_VOLUNTEERS')):
+            student_names.append('')
 
-    data_range = 'БЛАГОВІСТЯ (Бот)!B3:B{0}'.format(len(student_names) + 2)
-    service.spreadsheets().values().update(
-        spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-        valueInputOption='RAW',
-        range=data_range,
-        body=dict(
-            majorDimension='COLUMNS',
-            values=[student_names]
-        )
-    ).execute()
+        data_range = f'Благовістя 2025!B3:B{len(student_names) + 2}'
+        
+        request_body = {
+            'values': [student_names],
+            'majorDimension': 'COLUMNS'
+        }
+        
+        service.spreadsheets().values().update(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=data_range,
+            valueInputOption='RAW',
+            body=request_body
+        ).execute()
+        
+    except Exception as e:
+        print(f"Error adding volunteer: {e}")
 
 
 def get_volunteer_index(volunteer: Volunteer):
-    service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-    student_names = service.spreadsheets().values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-                                                        range=read_config("VOLUNTEERS_NAME_RANGE")).execute().get('values')
-    final_names = []
-    for name in student_names:
-        final_names.append(name[0])
-    for i in range(len(final_names)):
-        if final_names[i] == volunteer.name:
-            return i + 1
-    return None
+    try:
+        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        result = service.spreadsheets().values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=read_config("VOLUNTEERS_NAME_RANGE")
+        ).execute()
+        
+        student_names = result.get('values', [])
+        final_names = []
+        for name in student_names:
+            if name:  # Check if name list is not empty
+                final_names.append(name[0])
+                
+        for i in range(len(final_names)):
+            if final_names[i] == volunteer.name:
+                return i + 1
+        return None
+        
+    except Exception as e:
+        print(f"Error getting volunteer index: {e}")
+        return None
 
 
 def is_admin(user_id: int):
@@ -176,13 +261,18 @@ def is_admin(user_id: int):
 
 
 def get_volunteers():
-    file = open('Volunteers.json', encoding='UTF-8')
-    lines = json.load(file)
-    result = []
-    file.close()
-    for line in lines:
-        result.append(Volunteer([line.get("id"), line.get("name"), line.get("remind_statistics")]))
-    return result
+    try:
+        with open('data/Volunteers.json', 'r', encoding='UTF-8') as f:
+            lines = json.load(f)
+            result = []
+            for line in lines:
+                result.append(Volunteer([line.get("id"), line.get("name"), line.get("remind_statistics")]))
+            return result
+    except FileNotFoundError:
+        return []
+    except Exception as e:
+        print(f"Error getting volunteers: {e}")
+        return []
 
 
 def get_volunteer_ids():
@@ -208,36 +298,67 @@ def get_volunteer_name(volunteer_id):
             return volunteer.name
     return 'noName'
 
+
+def get_current_week():
+    threshold_day = datetime.datetime.now(pytz.timezone('Europe/Kiev')) + datetime.timedelta(days=-weekdays.get(read_config("THRESHOLD")))
+    return threshold_day.isocalendar().week
+
+
+def get_column_count(week = None):
+    if week is not None:
+        current_week = week
+    else:
+        current_week = get_current_week()
+    return 2 - current_week % 2
+
 def get_current_columns():
-    first_week = 36
+    first_week = 35
     first_column = 3
-    current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
-    #current_time = datetime.date(2024, 9, 23)
-    threshold_day = current_time + datetime.timedelta(days=-weekdays.get(read_config("THRESHOLD")))
-    current_week = threshold_day.isocalendar().week
-    columns = 3
-    start_column = number_to_excel_column((current_week-first_week) * columns + first_column)
-    end_column = number_to_excel_column((current_week-first_week + 1) * columns + first_column - 1)
-    return start_column, end_column
+    current_week = get_current_week()
+    columns = get_column_count()
+    start_column = int(floor((current_week - first_week) * 1.5)) + first_column
+    end_column = start_column + columns - 1
+    return number_to_excel_column(start_column), number_to_excel_column(end_column)
+
+def get_columns(week: int):
+    first_week = 35
+    first_column = 3
+    current_week = week
+    columns = get_column_count(week)
+    start_column = int(floor((current_week - first_week) * 1.5)) + first_column
+    end_column = start_column + columns - 1
+    return number_to_excel_column(start_column), number_to_excel_column(end_column)
+
 
 def volunteer_filled_statistics(volunteer):
     try:
         service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-        sheet = service.spreadsheets()
         start, end = get_current_columns()
-        range_name = 'БЛАГОВІСТЯ (Бот)!{0}{2}:{1}{2}'.format(start, end, get_volunteer_index(volunteer) + 2)
-        statistics = sheet.values().get(spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-                                        range=range_name).execute().get('values')
-        if statistics is None:
+        row = get_volunteer_index(volunteer)
+        if row is None:
             return False
-        return True
+            
+        range_name = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
+        
+        result = service.spreadsheets().values().get(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=range_name
+        ).execute()
+        
+        statistics = result.get('values', [])
+        return bool(statistics and any(statistics[0]))
 
     except HttpError as err:
-        print(err)
+        print(f"HTTP Error checking statistics: {err}")
         return False
+    except Exception as e:
+        print(f"Error checking statistics: {e}")
+        return False
+
 
 def volunteer_exists(id):
     return id in get_volunteer_ids()
+
 
 def number_to_excel_column(num: int):
     result = ""
@@ -246,6 +367,7 @@ def number_to_excel_column(num: int):
         result = chr(ord("A") + modulo) + result
         num = (num - modulo) // 26
     return result
+
 
 def excel_column_to_number(col):
     num = 0
@@ -256,12 +378,15 @@ def excel_column_to_number(col):
 
 
 def get_text(text):
-    file = open('texts.json', encoding='UTF-8')
-    content = json.load(file)
-    file.close()
-    if content.get(text) is not None:
-        return content.get(text)
-    return ''
+    try:
+        with open('data/texts.json', 'r', encoding='UTF-8') as file:
+            content = json.load(file)
+            return content.get(text, '')
+    except FileNotFoundError:
+        return ''
+    except Exception as e:
+        print(f"Error getting text: {e}")
+        return ''
 
 
 def arrange_keyboard(count, columns):
@@ -269,32 +394,42 @@ def arrange_keyboard(count, columns):
     for i in range(count // columns):
         row = []
         for j in range(columns):
-            row.append(i * columns + j)
+            row.append(KeyboardButton(i * columns + j))
         result.append(row)
     row = []
     for i in range(count % columns):
-        row.append(count - count % columns + i)
-    result.append(row)
+        row.append(KeyboardButton(count - count % columns + i))
+    if len(row) > 0:
+        result.append(row)
     return result
 
 
 def update_texts():
-    questions = get_spreadsheets_data().get("questions")
-    file = open("texts.json", "w", encoding='UTF-8')
-    data = questions.values
-    dictionary = {}
-    for row in data:
-        dictionary[row[0]] = row[1]
-    file.write(json.dumps(dictionary, indent=4, ensure_ascii=False))
-    file.close()
+    try:
+        data = get_spreadsheets_data()
+        if data is None:
+            return
+            
+        questions = data.get("questions")
+        with open("data/texts.json", "w", encoding='UTF-8') as file:
+            data = questions.values
+            dictionary = {}
+            for row in data:
+                if len(row) >= 2:  # Ensure row has at least 2 elements
+                    dictionary[row[0]] = row[1]
+            file.write(json.dumps(dictionary, indent=4, ensure_ascii=False))
+    except Exception as e:
+        print(f"Error updating texts: {e}")
 
-def start_command(update, context):
-    context.bot.send_message(chat_id=update.message.chat_id, text='hello')
+
+async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(chat_id=update.message.chat_id, text='hello')
 
 
 def select_random_question(text):
     questions = text.split(';;')
     return questions[random.randint(0, len(questions) - 1)]
+
 
 def check_statistics_availability(id):
     if not volunteer_exists(id):
@@ -302,127 +437,285 @@ def check_statistics_availability(id):
     start, end = get_current_columns()
     if excel_column_to_number(start) < excel_column_to_number("C"):
         return False, "SEMESTER_NOT_STARTED"
-    if excel_column_to_number(end) > excel_column_to_number("AU"):
+    if excel_column_to_number(end) > excel_column_to_number("AF"):
         return False, "SEMESTER_OVER"
     return True, ""
 
-def question_1(update, context):
+
+async def question_1(update: Update, context: ContextTypes.DEFAULT_TYPE):
     id = update.message.chat_id
     available, message = check_statistics_availability(id)
     if not available:
-        context.bot.send_message(chat_id=id, text=select_random_question(get_text(message)).format(
-            get_volunteer_name(id).split(" ")[1]))
+        await context.bot.send_message(
+            chat_id=id,
+            text=select_random_question(get_text(message)).format(get_volunteer_name(id).split(" ")[1])
+        )
         return ConversationHandler.END
-    context.bot.send_message(chat_id=id, text=select_random_question(get_text('QUESTION_1')),
-                             reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                              one_time_keyboard=True, resize_keyboard=True))
+    print(update.message.text)
+    pattern = r"\d\d\.\d\d - \d\d\.\d\d \(\d.\):"
+    if re.match(pattern, update.message.text):
+        context.user_data['week'] = int(update.message.text.split('(')[-1].split(')')[0].strip())
+    await context.bot.send_message(
+        chat_id=id,
+        text=select_random_question(get_text('QUESTION_1')),
+        reply_markup=ReplyKeyboardMarkup(
+            arrange_keyboard(9, 3),
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    )
+    if get_column_count(context.user_data.get('week')) == 1:
+        return EXIT_CONVERSATION_EARLY
     return ENTER_GOSPEL
 
 
-def question_2(update, context):
+async def question_2(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text.isnumeric():
-        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
-                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                                  one_time_keyboard=True, resize_keyboard=True))
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+            reply_markup=ReplyKeyboardMarkup(
+                arrange_keyboard(9, 3),
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
         return ENTER_GOSPEL
+        
     context.user_data['searchers'] = update.message.text
-    context.bot.send_message(chat_id=update.message.chat_id,
-                             text=select_random_question(get_text('QUESTION_2')),
-                             reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                              one_time_keyboard=True, resize_keyboard=True))
-    return ENTER_TEAMMATE
-
-
-def question_3(update, context):
-    if not update.message.text.isnumeric():
-        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
-                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                                  one_time_keyboard=True, resize_keyboard=True))
-        return ENTER_TEAMMATE
-    context.user_data['gospel'] = update.message.text
-    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('QUESTION_3')),
-                             reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                              one_time_keyboard=True, resize_keyboard=True))
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('QUESTION_2')),
+        reply_markup=ReplyKeyboardMarkup(
+            arrange_keyboard(9, 3),
+            one_time_keyboard=True,
+            resize_keyboard=True
+        )
+    )
     return EXIT_CONVERSATION
 
 
-def exit_conversation(update, context):
+async def exit_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message.text.isnumeric():
-        context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
-                                 reply_markup=ReplyKeyboardMarkup(arrange_keyboard(9, 3),
-                                                                  one_time_keyboard=True, resize_keyboard=True))
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+            reply_markup=ReplyKeyboardMarkup(
+                arrange_keyboard(9, 3),
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
         return EXIT_CONVERSATION
-    context.user_data['teammate'] = update.message.text
-    context.bot.send_message(chat_id=update.message.chat_id,
-                             text=select_random_question(get_text('WRITING')),
-                             reply_markup=ReplyKeyboardRemove())
+        
+    context.user_data['gospel'] = update.message.text
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('WRITING')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
     write_statistics_to_spreadsheets(
         Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id)),
-                   context.user_data['searchers'], context.user_data['gospel'],
-                   context.user_data['teammate']]))
-    context.bot.send_message(chat_id=update.message.chat_id,
-                             text=select_random_question(get_text('STATISTICS_GATHERED')),
-                             reply_markup=ReplyKeyboardRemove())
+                   context.user_data['searchers'], context.user_data['gospel']]))
+                   
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('STATISTICS_GATHERED')),
+        reply_markup=ReplyKeyboardRemove()
+    )
     return ConversationHandler.END
 
 
-def ask_name(update, context):
+async def exit_conversation_early(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.text.isnumeric():
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+            reply_markup=ReplyKeyboardMarkup(
+                arrange_keyboard(9, 3),
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
+        return EXIT_CONVERSATION
+        
+    context.user_data['searchers'] = update.message.text
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('WRITING')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    write_statistics_to_spreadsheets(
+        Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id)),
+                   context.user_data['searchers'], 0]))
+                   
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('STATISTICS_GATHERED')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+async def exit_previous_statistics_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.text.isnumeric():
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+            reply_markup=ReplyKeyboardMarkup(
+                arrange_keyboard(9, 3),
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
+        return EXIT_CONVERSATION
+        
+    context.user_data['gospel'] = update.message.text
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('WRITING')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    write_statistics_to_spreadsheets(
+        Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id)), context.user_data['searchers'], 
+        context.user_data['gospel']]), context.user_data.get('week')
+    )
+                   
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('STATISTICS_GATHERED')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+async def exit_previous_statistics_conversation_early(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message.text.isnumeric():
+        await context.bot.send_message(
+            chat_id=update.message.chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NUMERIC')),
+            reply_markup=ReplyKeyboardMarkup(
+                arrange_keyboard(9, 3),
+                one_time_keyboard=True,
+                resize_keyboard=True
+            )
+        )
+        return EXIT_CONVERSATION
+        
+    context.user_data['searchers'] = update.message.text
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('WRITING')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
+    write_statistics_to_spreadsheets(
+        Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id)),
+                   context.user_data['searchers'], 0]), context.user_data.get('week'))
+                   
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('STATISTICS_GATHERED')),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    return ConversationHandler.END
+
+
+
+async def ask_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     context.user_data['id'] = str(update.message.chat_id)
-    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('GREETING')))
-    context.bot.send_message(chat_id=update.message.chat_id, text=select_random_question(get_text('ASK_NAME')))
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('GREETING'))
+    )
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=select_random_question(get_text('ASK_NAME'))
+    )
     return ENTER_NAME
 
 
-def enter_name(update, context):
+async def enter_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
     if len(update.message.text.split(" ")) != 2:
-        context.bot.send_message(chat_id=chat_id, text=select_random_question(get_text('VALIDATION_FAILED_NAME')).format(update.message.text))
-        return ENTER_NAME
-    context.user_data['name'] = update.message.text
-    context.bot.send_message(chat_id=chat_id, text=select_random_question(get_text('WRITING')))
-    add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
-    context.bot.send_message(chat_id=chat_id,
-                             text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(
-                                 get_volunteer_name(chat_id).split(" ")[-1]))
-    restart_jobs(context.job_queue)
-    return ConversationHandler.END
-
-
-def write_statistics_to_spreadsheets(volunteer: Volunteer):
-    service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
-    start, end = get_current_columns()
-    row = get_volunteer_index(volunteer) + 2
-    data_range = 'БЛАГОВІСТЯ (Бот)!{0}{2}:{1}{2}'.format(start, end, row)
-
-    data = [volunteer.searchers, volunteer.gospel, volunteer.teammate]
-
-    service.spreadsheets().values().update(
-        spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
-        valueInputOption='RAW',
-        range=data_range,
-        body=dict(
-            majorDimension='ROWS',
-            values=[data]
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=select_random_question(get_text('VALIDATION_FAILED_NAME')).format(update.message.text)
         )
-    ).execute()
-    return
-
-
-def end_conversation(update, context):
+        return ENTER_NAME
+        
+    context.user_data['name'] = update.message.text
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=select_random_question(get_text('WRITING'))
+    )
+    
+    add_volunteer(Volunteer([int(context.user_data['id']), context.user_data['name']]))
+    
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=select_random_question(get_text('REGISTRATION_COMPLETE')).format(
+            get_volunteer_name(chat_id).split(" ")[-1])
+    )
+    
+    restart_jobs(context.application.job_queue)
     return ConversationHandler.END
 
 
-def reminder(context):
-    id = int(context.job.context[0])
-    if len(context.job.context) > 1:
-        order = context.job.context[1]
+def write_statistics_to_spreadsheets(volunteer: Volunteer, week = None):
+    try:
+        service = build('sheets', 'v4', credentials=connect_to_spreadsheets())
+        start, end = get_current_columns()
+        if week is None:
+            start, end = get_current_columns()
+        else:
+            start, end = get_columns(week)
+        row = get_volunteer_index(volunteer)
+        if row is None:
+            print(f"Volunteer {volunteer.name} not found in spreadsheet")
+            return
+            
+        data_range = f'Благовістя 2025!{start}{row + 2}:{end}{row + 2}'
+        data = [volunteer.searchers]
+        if start != end:
+            data.append(volunteer.gospel)
+
+        request_body = {
+            'values': [data]
+        }
+        
+        service.spreadsheets().values().update(
+            spreadsheetId=read_config("SAMPLE_SPREADSHEET_ID"),
+            range=data_range,
+            valueInputOption='RAW',
+            body=request_body
+        ).execute()
+        
+    except Exception as e:
+        print(f"Error writing statistics to spreadsheet: {e}")
+
+
+async def end_conversation(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    return ConversationHandler.END
+
+
+async def reminder(context: ContextTypes.DEFAULT_TYPE):
+    id = int(context.job.data[0])
+    if len(context.job.data) > 1:
+        order = context.job.data[1]
     else:
         order = 1
+        
     if volunteer_filled_statistics(Volunteer([id, get_volunteer_name(id)])):
-        context.bot.send_message(chat_id=int(read_config("ADMIN_ID")),
-                                 text="{0} already filled statistics".format(get_volunteer_name(id)))
+        await context.bot.send_message(
+            chat_id=int(read_config("ADMIN_ID")),
+            text=f"{get_volunteer_name(id)} already filled statistics"
+        )
         return
+        
     message = 'REMINDER'
     if order == 2:
         message = 'REMINDER2'
@@ -432,110 +725,238 @@ def reminder(context):
         message = 'REMINDER_LATE'
     if order == 5:
         message = 'REMINDER_SORRY'
+        
     try:
         keyboard = [[KeyboardButton(select_random_question(get_text('FILL_STATISTICS')))]]
-        context.bot.send_message(chat_id=id,
-                                 text=select_random_question(get_text(message)).format(get_volunteer_name(id).split(" ")[1]),
-                                 reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True,
-                                                                  resize_keyboard=True), parse_mode=ParseMode.HTML)
+        await context.bot.send_message(
+            chat_id=id,
+            text=select_random_question(get_text(message)).format(get_volunteer_name(id).split(" ")[1]),
+            reply_markup=ReplyKeyboardMarkup(
+                keyboard,
+                one_time_keyboard=True,
+                resize_keyboard=True
+            ),
+            parse_mode=ParseMode.HTML
+        )
+        
         sleep(1)
-        context.bot.send_message(chat_id=int(read_config("ADMIN_ID")),
-                                 text="reminded {0}".format(get_volunteer_name(id)))
-    except:
-        context.bot.send_message(chat_id=int(read_config('ADMIN_ID')),
-                                 text='chat {0} of {1} not found'.format(id, get_volunteer_name(id)))
+        await context.bot.send_message(
+            chat_id=int(read_config("ADMIN_ID")),
+            text=f"reminded {get_volunteer_name(id)}"
+        )
+    except Exception as e:
+        await context.bot.send_message(
+            chat_id=int(read_config('ADMIN_ID')),
+            text=f'chat {id} of {get_volunteer_name(id)} not found: {e}'
+        )
 
 
-def spam_volunteers(update, context):
+async def spam_volunteers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(update.message.chat_id):
         return
+        
     order = 1
-    if len(context.args) == 1:
+    if context.args and len(context.args) == 1:
         order = int(context.args[0])
+        
     for id in get_volunteer_ids():
-        context.job_queue.run_once(reminder, 0, context=[id, order])
+        context.job_queue.run_once(reminder, 0, data=[id, order])
         time.sleep(2)
 
-def spam_admin(update, context):
+
+async def spam_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     id = update.message.chat_id
     print(id)
     order = 3
-    if len(context.args) == 1:
+    if context.args and len(context.args) == 1:
         order = int(context.args[0])
+        
     if not is_admin(id):
         print("not admin")
         return
+        
     time.sleep(2)
-    context.job_queue.run_once(reminder, 0, context=[id, order])
-    print("sent to {0}".format(id))
+    context.job_queue.run_once(reminder, 0, data=[id, order])
+    print(f"sent to {id}")
+
 
 def restart_jobs(job_queue):
     delay_seconds = 0
     for job in job_queue.jobs():
         job.schedule_removal()
+        
     for id in get_volunteer_ids():
-        job_queue.run_daily(reminder,
-                            time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
-                            days=[6], context=[id, 1], name=str(id))
+        job_queue.run_daily(
+            reminder,
+            time=datetime.time(hour=17, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
+            days=[0],
+            data=[id, 1],
+            name=str(id)
+        )
         delay_seconds += 2
-        job_queue.run_daily(reminder,
-                            time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
-                            days=[6], context=[id, 2], name=str(id))
+        
+        job_queue.run_daily(
+            reminder,
+            time=datetime.time(hour=19, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
+            days=[0],
+            data=[id, 2],
+            name=str(id)
+        )
         delay_seconds += 2
-        job_queue.run_daily(reminder,
-                            time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
-                            days=[6], context=[id, 3], name=str(id))
+        
+        job_queue.run_daily(
+            reminder,
+            time=datetime.time(hour=21, minute=(delay_seconds // 60) % 60, second=delay_seconds % 60, tzinfo=pytz.timezone('Europe/Kyiv')),
+            days=[0],
+            data=[id, 3],
+            name=str(id)
+        )
         delay_seconds += 2
 
-def show_menu(update, context):
-    context.bot.send_message(chat_id=update.message.chat_id, text=get_text('MENU'), parse_mode=ParseMode.HTML)
+
+async def show_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [
+        [KeyboardButton(select_random_question(get_text('FILL_STATISTICS')))],
+        [KeyboardButton(get_text('SELECT_PREVIOUS_WEEK'))]
+        ]
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text=get_text('MENU'),
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=True
+        ),
+        parse_mode=ParseMode.HTML
+    )
 
 
-def running_jobs(update, context):
+def get_previous_weeks():
+    current_time = datetime.datetime.now(pytz.timezone('Europe/Kiev'))
+    threshold_day = current_time + datetime.timedelta(days=-weekdays.get(read_config("THRESHOLD")))
+    current_week = threshold_day.isocalendar().week
+    result = []
+    weeks = []
+    for week in range(35, current_week):
+        week_str = f"{current_time.year}-W{week:02d}-1"
+        monday = datetime.datetime.strptime(week_str, "%Y-W%W-%w").date()
+        sunday = monday + datetime.timedelta(days=6)
+        result.append(f"{monday.strftime("%d.%m")} - {sunday.strftime("%d.%m")} ({week})")
+        weeks.append(week)
+    return result, weeks
+
+
+async def select_previous_week(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard_buttons = []
+    volunteer = Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id))])
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text="Сенкунду...",
+        parse_mode=ParseMode.HTML
+    )
+    statistics = get_statistics_from_spreadsheets(volunteer, get_previous_weeks()[1])
+    statistics_str = []
+    i = 0
+    while i < len(statistics):
+        if statistics[i] is None or statistics[i] == '':
+            statistics_str.append(f"Не заповнено")
+            i += 1
+            continue
+        if i % 3 == 0:
+            statistics_str.append(f"{statistics[i]} євангелій")
+            i += 1
+            continue
+        if i % 3 == 1:
+            statistics_str.append(f"{statistics[i]} євангелій, {statistics[i+1]} закликів")
+            i += 2
+        continue
+
+    for i in range(len(get_previous_weeks()[1])):
+        keyboard_buttons.append([KeyboardButton(
+            f'{get_previous_weeks()[0][i]}: {statistics_str[i]}'
+        )])
+    await context.bot.send_message(
+        chat_id=update.message.chat_id,
+        text="Обери тиждень:",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard_buttons,
+            one_time_keyboard=True,
+            resize_keyboard=True
+        ),
+        parse_mode=ParseMode.HTML
+    )
+    return ENTER_SEARCHERS
+
+
+async def running_jobs(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.job_queue.jobs()) == 0:
-        context.bot.send_message(chat_id=update.message.chat_id, text='no running jobs')
+        await context.bot.send_message(chat_id=update.message.chat_id, text='no running jobs')
         return
+        
     reply = ''
     for job in context.job_queue.jobs():
-        reply += '{0}, {1}, {2}\n'.format(job.context, get_volunteer_name(job.context[0]), job.next_t)
+        reply += f'{job.data}, {get_volunteer_name(job.data[0])}, {job.next_t}\n'
         if len(reply) > 3500:
-            context.bot.send_message(chat_id=update.message.chat_id, text=reply)
+            await context.bot.send_message(chat_id=update.message.chat_id, text=reply)
             reply = ''
-    context.bot.send_message(chat_id=update.message.chat_id, text=reply)
+            
+    await context.bot.send_message(chat_id=update.message.chat_id, text=reply)
 
 
 def main():
     update_texts()
-    update_volunteers(get_spreadsheets_data().get("volunteers"))
+    data = get_spreadsheets_data()
+    if data:
+        update_volunteers(data.get("volunteers", []))
     print("updated")
-    updater = Updater(read_config("TEST_BOT_TOKEN"), use_context=True)
-    dispatcher = updater.dispatcher
-    restart_jobs(updater.job_queue)
-    # dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, echo))
+    
+    application = Application.builder().token(read_config("TEST_BOT_TOKEN")).build()
+    
+    restart_jobs(application.job_queue)
+    
     register_conversation_handler = ConversationHandler(
         entry_points=[CommandHandler('start', ask_name)],
-        states={ENTER_NAME: [MessageHandler(Filters.text & (~ Filters.command), enter_name)],
-                ASK_NAME: [MessageHandler(Filters.text & (~ Filters.command), ask_name)]},
+        states={
+            ENTER_NAME: [MessageHandler(filters.TEXT & (~ filters.COMMAND), enter_name)],
+            ASK_NAME: [MessageHandler(filters.TEXT & (~ filters.COMMAND), ask_name)]
+        },
         fallbacks=[]
     )
+    
     gather_statistics_conversation_handler = ConversationHandler(
-        entry_points=[CommandHandler('send_statistics', question_1),
-                      MessageHandler(Filters.text(select_random_question(get_text('FILL_STATISTICS'))), question_1)],
+        entry_points=[
+            CommandHandler('send_statistics', question_1),
+            MessageHandler(filters.Text(get_text('FILL_STATISTICS')), question_1)
+        ],
         states={
-            ENTER_GOSPEL: [MessageHandler(Filters.text & (~ Filters.command), question_2)],
-            ENTER_TEAMMATE: [MessageHandler(Filters.text & (~ Filters.command), question_3)],
-            EXIT_CONVERSATION: [MessageHandler(Filters.text & (~ Filters.command), exit_conversation)]
+            ENTER_GOSPEL: [MessageHandler(filters.TEXT & (~ filters.COMMAND), question_2)],
+            EXIT_CONVERSATION: [MessageHandler(filters.TEXT & (~ filters.COMMAND), exit_conversation)],
+            EXIT_CONVERSATION_EARLY: [MessageHandler(filters.TEXT & (~ filters.COMMAND), exit_conversation_early)]
         },
         fallbacks=[CommandHandler('finish', end_conversation)]
     )
-    dispatcher.add_handler(register_conversation_handler)
-    dispatcher.add_handler(gather_statistics_conversation_handler)
-    dispatcher.add_handler(CommandHandler("spam_admin", spam_admin))
-    dispatcher.add_handler(CommandHandler("spam_volunteers", spam_volunteers))
-    dispatcher.add_handler(CommandHandler("running_jobs", running_jobs))
-    dispatcher.add_handler(CommandHandler("menu", show_menu))
-    updater.start_polling()
-    updater.idle()
+    
+    gather_previous_statistics_conversation_handler = ConversationHandler(
+        entry_points=[
+            MessageHandler(filters.Text(get_text('SELECT_PREVIOUS_WEEK')), select_previous_week)
+        ],
+        states={
+            ENTER_SEARCHERS: [MessageHandler(filters.TEXT & (~ filters.COMMAND), question_1)],
+            ENTER_GOSPEL: [MessageHandler(filters.TEXT & (~ filters.COMMAND), question_2)],
+            EXIT_CONVERSATION: [MessageHandler(filters.TEXT & (~ filters.COMMAND), exit_previous_statistics_conversation)],
+            EXIT_CONVERSATION_EARLY: [MessageHandler(filters.TEXT & (~ filters.COMMAND), exit_previous_statistics_conversation_early)]
+        },
+        fallbacks=[CommandHandler('finish', end_conversation)]
+    )
+    
+    application.add_handler(register_conversation_handler)
+    application.add_handler(gather_statistics_conversation_handler)
+    application.add_handler(gather_previous_statistics_conversation_handler)
+    application.add_handler(CommandHandler("spam_admin", spam_admin))
+    application.add_handler(CommandHandler("spam_volunteers", spam_volunteers))
+    application.add_handler(CommandHandler("running_jobs", running_jobs))
+    application.add_handler(CommandHandler("menu", show_menu))
+    
+    application.run_polling()
 
 
 if __name__ == '__main__':
