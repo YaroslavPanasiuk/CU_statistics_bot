@@ -918,7 +918,7 @@ async def select_previous_week(update: Update, context: ContextTypes.DEFAULT_TYP
     volunteer = Volunteer([str(update.message.chat_id), get_volunteer_name(str(update.message.chat_id))])
     await context.bot.send_message(
         chat_id=update.message.chat_id,
-        text="Сенкунду...",
+        text=select_random_question(get_text('GETTING_YOUR_STATISTICS')),
         parse_mode=ParseMode.HTML
     )
     statistics = get_statistics_from_spreadsheets(volunteer, get_previous_weeks()[1])
