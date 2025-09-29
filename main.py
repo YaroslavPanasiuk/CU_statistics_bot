@@ -977,7 +977,7 @@ def main():
         update_volunteers(data.get("volunteers", []))
     print("updated")
     
-    application = Application.builder().token(read_config("TEST_BOT_TOKEN")).build()
+    application = Application.builder().token(read_config("BOT_TOKEN")).build()
     
     restart_jobs(application.job_queue)
     
