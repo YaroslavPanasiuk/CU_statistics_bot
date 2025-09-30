@@ -588,7 +588,7 @@ async def exit_conversation_early(update: Update, context: ContextTypes.DEFAULT_
                 resize_keyboard=True
             )
         )
-        return EXIT_CONVERSATION
+        return EXIT_CONVERSATION_EARLY
         
     context.user_data['searchers'] = update.message.text
     await context.bot.send_message(
@@ -652,7 +652,7 @@ async def exit_previous_statistics_conversation_early(update: Update, context: C
                 resize_keyboard=True
             )
         )
-        return EXIT_CONVERSATION
+        return EXIT_CONVERSATION_EARLY
         
     context.user_data['searchers'] = update.message.text
     await context.bot.send_message(
