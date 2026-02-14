@@ -1,0 +1,7 @@
+aiogram
+python-dotenv
+sqlalchemy
+asyncpg
+greenlet
+gspread
+apscheduler
