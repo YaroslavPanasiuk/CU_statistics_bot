@@ -19,7 +19,6 @@ def load_volunteer_list():
 
 async def volunteer_to_row_coord(tg_id):
     volunteer = await database.get_user_by_tg_id(tg_id)
-    print(volunteer)
     volunteers = load_volunteer_list()
     for i, v in enumerate(volunteers):
          if volunteer.full_name == v:
