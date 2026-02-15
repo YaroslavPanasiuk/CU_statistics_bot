@@ -11,6 +11,8 @@ class Config:
     GOOGLE_SHEET_CONFIG_URL = os.getenv("GOOGLE_SHEET_CONFIG_URL")
     GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL")
     GOOGLE_CREDS = json.loads(os.getenv("GOOGLE_CREDS_JSON", "{}"))
+    LOCALE = "uk"
+    TIMEZONE = os.getenv("TZ")
     
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found in .env file")

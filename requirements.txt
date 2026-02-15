@@ -5,3 +5,4 @@ asyncpg
 greenlet
 gspread
 apscheduler
+babel

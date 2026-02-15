@@ -1,8 +1,12 @@
 # handlers/admin.py
 from aiogram import Router, types
 from bot.filters.is_admin import IsAdmin
+from bot.utils.schedulers import send_weekly_reminder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
+from bot.lexicon import select_random_line
+from bot.db import database
+from bot.utils.keyboards import get_main_menu_keyboard
 
 router = Router()
 router.message.filter(IsAdmin())
@@ -28,3 +32,31 @@ async def cmd_list_jobs(message: types.Message, scheduler: AsyncIOScheduler):
         )
 
     await message.answer(response, parse_mode="HTML")
+
+
+@router.message(Command("remind_volunteers"), IsAdmin())
+async def cmd_list_jobs(message: types.Message, command: CommandObject):
+    if not command.args:
+        await message.answer("Please provide reminder level. Usage: /remind_volunteers [level]")
+        return
+
+    if command.args.isdigit():
+        level = int(command.args)
+        user_ids = await database.get_all_registered_ids()
+        await send_weekly_reminder(message.bot, level, user_ids)
+    else:
+        await message.answer("Invalid level format. Please use a number.")
+
+
+@router.message(Command("remind_admin"), IsAdmin())
+async def cmd_list_jobs(message: types.Message, command: CommandObject):
+    if not command.args:
+        await message.answer("Please provide reminder level. Usage: /remind_admin [level]")
+        return
+
+    if command.args.isdigit():
+        level = int(command.args)
+        user_ids = [message.from_user.id]
+        await send_weekly_reminder(message.bot, level, user_ids)
+    else:
+        await message.answer("Invalid level format. Please use a number.")

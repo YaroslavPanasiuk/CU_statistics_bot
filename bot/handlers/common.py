@@ -6,7 +6,7 @@ from aiogram.fsm.state import StatesGroup, State
 from bot.lexicon import select_random_line, LexiconFilter
 from datetime import datetime
 from bot.utils.maths import questions_in_week
-from bot.utils.formatters import week_num_to_dates
+from bot.utils.formatters import week_num_to_dates, random_bible_verse
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered
@@ -76,7 +76,8 @@ async def cmd_fill_stats(message: types.Message, state: FSMContext):
 
 @router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
 async def start_old_stats(message: types.Message, state: FSMContext):
-    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=get_weeks_keyboard())
+    kb = await get_weeks_keyboard(message.from_user.id)
+    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
 @router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
@@ -143,3 +144,6 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
         await state.set_state(StatisticsCollection.waiting_for_answer)
 
 
+@router.message(~F.text.startswith("/"))
+async def not_registered(message: types.Message):
+    await message.answer(random_bible_verse())

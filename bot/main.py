@@ -2,7 +2,7 @@
 import asyncio
 from aiogram import Bot, Dispatcher
 from bot.config import config
-from bot.lexicon import Lexicon, select_random_line
+from bot.lexicon import Lexicon
 from bot.handlers import register_handlers
 from bot.db import database
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -18,11 +18,11 @@ async def main():
     dp = Dispatcher(storage=MemoryStorage())
     register_handlers(dp)
 
-    scheduler = AsyncIOScheduler(timezone='Europe/Kyiv')
-    
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=17, minute=0, kwargs={'bot': bot, 'level':1})
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=19, minute=0, kwargs={'bot': bot, 'level':2})
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=21, minute=0, kwargs={'bot': bot, 'level':3})
+    scheduler = AsyncIOScheduler(timezone=config.TIMEZONE)
+    user_ids = await database.get_all_registered_ids()
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=17, minute=0, kwargs={'bot': bot, 'level':1, 'user_ids': user_ids})
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=19, minute=0, kwargs={'bot': bot, 'level':2, 'user_ids': user_ids})
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=21, minute=0, kwargs={'bot': bot, 'level':3, 'user_ids': user_ids})
     dp["scheduler"] = scheduler
 
     scheduler.start()
