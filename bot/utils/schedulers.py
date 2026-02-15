@@ -20,7 +20,8 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
             await bot.send_message(
                 tg_id,
                 select_random_line(f"REMINDER{level}").format(user.full_name.split()[-1]), 
-                reply_markup=get_main_menu_keyboard()
+                reply_markup=get_main_menu_keyboard(),
+                parse_mode="HTML"
             )
             await asyncio.sleep(0.5)
             await bot.send_message(config.ADMIN_IDS.split(',')[0], f"Reminded {user.full_name}, {level}")

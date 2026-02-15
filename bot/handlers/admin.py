@@ -1,5 +1,6 @@
 # handlers/admin.py
-from aiogram import Router, types
+import asyncio
+from aiogram import Bot, Router, types
 from bot.filters.is_admin import IsAdmin
 from bot.utils.schedulers import send_weekly_reminder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -58,3 +59,24 @@ async def cmd_list_jobs(message: types.Message, command: CommandObject):
         await send_weekly_reminder(message.bot, level, user_ids)
     else:
         await message.answer("Invalid level format. Please use a number.")
+
+
+@router.message(Command("broadcast"), IsAdmin())
+async def cmd_broadcast(message: types.Message, command: CommandObject, bot: Bot):
+    if not command.args:
+        return await message.answer("Usage: /broadcast [your message]")
+
+    user_ids = await database.get_all_registered_ids()
+    count = 0
+    
+    await message.answer(f"🚀 Starting broadcast to {len(user_ids)} users...")
+
+    for tg_id in user_ids:
+        try:
+            await bot.send_message(tg_id, command.args)
+            count += 1
+            await asyncio.sleep(0.05) 
+        except Exception as e:
+            print(f"Failed to send to {tg_id}: {e}")
+
+    await message.answer(f"✅ Broadcast complete. Sent to {count} users.")
