@@ -17,12 +17,10 @@ async def main():
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     register_handlers(dp)
-
     scheduler = AsyncIOScheduler(timezone=config.TIMEZONE)
-    user_ids = await database.get_all_registered_ids()
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=17, minute=0, kwargs={'bot': bot, 'level':1, 'user_ids': user_ids})
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=19, minute=0, kwargs={'bot': bot, 'level':2, 'user_ids': user_ids})
-    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=21, minute=0, kwargs={'bot': bot, 'level':3, 'user_ids': user_ids})
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=17, minute=0, kwargs={'bot': bot, 'level':1})
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=19, minute=0, kwargs={'bot': bot, 'level':2})
+    scheduler.add_job(send_weekly_reminder, trigger='cron', day_of_week='sun', hour=21, minute=0, kwargs={'bot': bot, 'level':3})
     dp["scheduler"] = scheduler
 
     scheduler.start()

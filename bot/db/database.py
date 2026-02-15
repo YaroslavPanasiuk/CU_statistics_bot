@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
-from sqlalchemy import BigInteger, ForeignKey, func, DateTime, UniqueConstraint, select, delete, asc
+from sqlalchemy import BigInteger, ForeignKey, func, DateTime, UniqueConstraint, select, delete, asc, not_, and_
 from sqlalchemy.dialects.postgresql import insert, JSONB
 from datetime import datetime
 from bot.config import config
@@ -48,6 +48,12 @@ async def get_unregistered_users():
 async def get_user_by_tg_id(tg_id: int) -> User | None:
     async with Session() as session:
         stmt = select(User).where(User.tg_id == tg_id)
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+async def get_user_by_full_name(full_name: str) -> User | None:
+    async with Session() as session:
+        stmt = select(User).where(User.full_name == full_name)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
     
@@ -115,7 +121,7 @@ async def get_user_statistics(tg_id, week):
     async with Session() as session:
         stmt = select(User.full_name, UserStats.stats, UserStats.last_modified).join(
             User, User.tg_id == UserStats.tg_id
-        ).where(User.tg_id == tg_id and UserStats.week == week)
+        ).where(and_(User.tg_id == tg_id, UserStats.week == week))
         result = await session.execute(stmt)
         return result.all()
     
@@ -125,3 +131,16 @@ async def get_all_registered_ids() -> list[int]:
         result = await session.execute(stmt)
         
         return list(result.scalars().all())
+    
+async def get_users_with_no_stats(week: int):
+    async with Session() as session:
+        stmt_filled = select(UserStats.tg_id).where(UserStats.week == week)
+        filled_ids = (await session.execute(stmt_filled)).scalars().all()
+
+        stmt = select(User).where(
+            User.tg_id != None,
+            not_(User.tg_id.in_(filled_ids))
+        )
+        
+        result = await session.execute(stmt)
+        return result.scalars().all()

@@ -22,7 +22,6 @@ async def cmd_list_jobs(message: types.Message, scheduler: AsyncIOScheduler):
 
     response = "<b>Active Scheduler Jobs:</b>\n\n"
     for job in jobs:
-        # job.next_run_time tells us when it triggers next
         next_run = job.next_run_time.strftime("%Y-%m-%d %H:%M:%S") if job.next_run_time else "Paused"
         response += (
             f"🆔 <b>ID:</b> <code>{job.id}</code>\n"
@@ -42,8 +41,7 @@ async def cmd_list_jobs(message: types.Message, command: CommandObject):
 
     if command.args.isdigit():
         level = int(command.args)
-        user_ids = await database.get_all_registered_ids()
-        await send_weekly_reminder(message.bot, level, user_ids)
+        await send_weekly_reminder(message.bot, level)
     else:
         await message.answer("Invalid level format. Please use a number.")
 
