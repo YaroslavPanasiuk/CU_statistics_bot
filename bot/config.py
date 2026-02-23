@@ -13,6 +13,7 @@ class Config:
     GOOGLE_CREDS = json.loads(os.getenv("GOOGLE_CREDS_JSON", "{}"))
     LOCALE = "uk"
     TIMEZONE = os.getenv("TZ")
+    LAG_TRESHOLD_DAYS = 3
     
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found in .env file")

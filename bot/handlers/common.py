@@ -4,14 +4,14 @@ from aiogram.fsm.context import FSMContext
 from bot.db import database
 from aiogram.fsm.state import StatesGroup, State
 from bot.lexicon import select_random_line, LexiconFilter
-from datetime import datetime
+from datetime import datetime, timedelta
 from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered
 from aiogram import F
-
+from bot.config import Config
 
 class Registration(StatesGroup):
     waiting_for_name = State()
@@ -62,7 +62,8 @@ async def complete_registration(callback: types.CallbackQuery):
 
 async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
     await state.update_data(selected_week=week_num)
-    
+
+    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await message.answer(
         f"{select_random_line("QUESTION_1")}",
         reply_markup=types.ReplyKeyboardRemove()
@@ -71,13 +72,12 @@ async def initiate_stats_questions(message: types.Message, state: FSMContext, we
 
 @router.message(or_f(Command("fill_stats"),LexiconFilter("FILL_STATISTICS")))
 async def cmd_fill_stats(message: types.Message, state: FSMContext):
-    current_week = datetime.now().isocalendar()[1]
+    current_week = (datetime.now() - timedelta(days=Config.LAG_TRESHOLD_DAYS)).isocalendar()[1]
     await initiate_stats_questions(message, state, current_week)
 
 @router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
 async def start_old_stats(message: types.Message, state: FSMContext):
     kb = await get_weeks_keyboard(message.from_user.id)
-    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
 @router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
