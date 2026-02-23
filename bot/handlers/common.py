@@ -63,7 +63,7 @@ async def complete_registration(callback: types.CallbackQuery):
 async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
     await state.update_data(selected_week=week_num)
 
-    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
+    await message.answer(select_random_line('SELECT_WEEK'))
     await message.answer(
         f"{select_random_line("QUESTION_1")}",
         reply_markup=types.ReplyKeyboardRemove()
