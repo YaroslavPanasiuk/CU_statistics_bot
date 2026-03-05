@@ -9,7 +9,7 @@ from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
-from bot.filters.is_registered import IsNotRegistered
+from bot.filters.is_registered import IsNotRegistered, IsRegistered
 from aiogram import F
 from bot.config import Config
 
@@ -20,9 +20,9 @@ class StatisticsCollection(StatesGroup):
     waiting_for_week = State()
     waiting_for_answer = State()
 
-register_router = Router()
+registered_router = Router()
 router = Router()
-register_router.message.filter(IsNotRegistered())
+registered_router.message.filter(IsRegistered())
 
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
@@ -41,7 +41,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
 
 
 
-@register_router.message()
+@router.message()
 async def not_registered(message: types.Message):
     await message.answer(select_random_line('NOT_REGISTERED'))
 
@@ -70,17 +70,17 @@ async def initiate_stats_questions(message: types.Message, state: FSMContext, we
     )
     await state.set_state(StatisticsCollection.waiting_for_answer)
 
-@router.message(or_f(Command("fill_stats"),LexiconFilter("FILL_STATISTICS")))
+@registered_router.message(or_f(Command("fill_stats"),LexiconFilter("FILL_STATISTICS")))
 async def cmd_fill_stats(message: types.Message, state: FSMContext):
     current_week = (datetime.now() - timedelta(days=Config.LAG_TRESHOLD_DAYS)).isocalendar()[1]
     await initiate_stats_questions(message, state, current_week)
 
-@router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
+@registered_router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
 async def start_old_stats(message: types.Message, state: FSMContext):
     kb = await get_weeks_keyboard(message.from_user.id)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
-@router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
+@registered_router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
 async def process_week_callback(
     callback: types.CallbackQuery, 
     callback_data: WeekCallback, 
@@ -95,7 +95,7 @@ async def process_week_callback(
     await callback.answer()
 
 
-@router.message(StatisticsCollection.waiting_for_answer)
+@registered_router.message(StatisticsCollection.waiting_for_answer)
 async def process_any_answer(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_index = get_next_question_index(data)
@@ -144,6 +144,6 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
         await state.set_state(StatisticsCollection.waiting_for_answer)
 
 
-@router.message(~F.text.startswith("/"))
+@registered_router.message(~F.text.startswith("/"))
 async def not_registered(message: types.Message):
     await message.answer(random_bible_verse())

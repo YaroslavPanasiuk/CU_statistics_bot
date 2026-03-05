@@ -6,3 +6,8 @@ class IsNotRegistered(BaseFilter):
     async def __call__(self, message: Message) -> bool:
         user = await get_user_by_tg_id(message.from_user.id)
         return user is None
+
+class IsRegistered(BaseFilter):
+    async def __call__(self, message: Message) -> bool:
+        user = await get_user_by_tg_id(message.from_user.id)
+        return user is not None
