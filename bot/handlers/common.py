@@ -24,12 +24,9 @@ registered_router = Router()
 router = Router()
 registered_router.message.filter(IsRegistered())
 
+
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    if await database.is_user_registered(message.from_user.id):
-        user = await database.get_user_by_tg_id(message.from_user.id)
-        await message.answer(f"Привіт, {user.full_name.split()[1]}!", reply_markup=get_main_menu_keyboard())
-        return
     unregistered = await database.get_unregistered_users()
     
     if not unregistered:
@@ -37,13 +34,13 @@ async def cmd_start(message: types.Message, state: FSMContext):
         return
 
     await message.answer(select_random_line('SELECT_YOUR_NAME'), reply_markup=get_unregistered_keyboard(unregistered))
-    await message.answer("Меню:", reply_markup=get_main_menu_keyboard())
 
+@registered_router.message(CommandStart())
+async def cmd_start(message: types.Message, state: FSMContext):
+    user = await database.get_user_by_tg_id(message.from_user.id)
+    await message.answer(f"Привіт, {user.full_name.split()[1]}!", reply_markup=get_main_menu_keyboard())
+    return
 
-
-@router.message()
-async def not_registered(message: types.Message):
-    await message.answer(select_random_line('NOT_REGISTERED'))
 
 @router.callback_query(F.data.startswith("reg_"))
 async def complete_registration(callback: types.CallbackQuery):
@@ -55,15 +52,15 @@ async def complete_registration(callback: types.CallbackQuery):
     
     if success:
         await callback.message.edit_text(select_random_line('REGISTRATION_COMPLETE').format(user.full_name.split()[1]))
-        await callback.message.edit_reply_markup(types.ReplyKeyboardRemove)
     else:
         await callback.answer("Error: Name already taken or not found.", show_alert=True)
+    await callback.bot.send_message(callback.from_user.id, "Меню:", reply_markup=get_main_menu_keyboard())
 
 
 async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
     await state.update_data(selected_week=week_num)
 
-    await message.answer(select_random_line('SELECT_WEEK'))
+    await message.answer(select_random_line('SELECTED_WEEK'))
     await message.answer(
         f"{select_random_line("QUESTION_1")}",
         reply_markup=types.ReplyKeyboardRemove()
@@ -78,6 +75,7 @@ async def cmd_fill_stats(message: types.Message, state: FSMContext):
 @registered_router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
 async def start_old_stats(message: types.Message, state: FSMContext):
     kb = await get_weeks_keyboard(message.from_user.id)
+    await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
 @registered_router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
@@ -145,5 +143,9 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
 
 
 @registered_router.message(~F.text.startswith("/"))
-async def not_registered(message: types.Message):
+async def default_handler(message: types.Message):
     await message.answer(random_bible_verse())
+
+@router.message()
+async def not_registered(message: types.Message):
+    await message.answer(select_random_line('NOT_REGISTERED'))

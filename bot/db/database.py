@@ -108,6 +108,18 @@ async def register_user(user_db_id: int, tg_id: int) -> bool:
             await session.commit()
             return True
         return False
+
+async def unregister_user(tg_id: int) -> bool:
+    async with Session() as session:
+        stmt = select(User).where(User.tg_id == tg_id)
+        response = await session.execute(stmt)
+        user = response.scalar_one_or_none()
+        
+        if user:
+            user.tg_id = None
+            await session.commit()
+            return True
+        return False
     
 async def export_data():
     async with Session() as session:
