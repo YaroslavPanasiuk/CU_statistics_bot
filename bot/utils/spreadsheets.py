@@ -34,7 +34,7 @@ async def export_stats_to_sheet(tg_id, week):
         stats = await database.get_user_statistics(week=week, tg_id=tg_id)
         gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
         sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-        worksheet = sh.get_worksheet(Lexicon.WORKSHEET_NAME)
+        worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
 
         row = await volunteer_to_row_coord(tg_id)
         columns = week_to_column_coords(week)
@@ -86,7 +86,7 @@ def fetch_users_with_no_stats(week):
     try:
         gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
         sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-        worksheet = sh.get_worksheet(Lexicon.WORKSHEET_NAME)
+        worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
 
         end_column = week_to_column_coords(week).split()[1]
         start_column = "B"
