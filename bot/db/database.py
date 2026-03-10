@@ -137,6 +137,14 @@ async def get_user_statistics(tg_id, week):
         result = await session.execute(stmt)
         return result.all()
     
+async def get_all_statistics_for_user(tg_id):
+    async with Session() as session:
+        stmt = select(User.full_name, UserStats.stats, UserStats.week).join(
+            User, User.tg_id == UserStats.tg_id
+        ).where(User.tg_id == tg_id)
+        result = await session.execute(stmt)
+        return result.all()
+    
 async def get_all_registered_ids() -> list[int]:
     async with Session() as session:
         stmt = select(User.tg_id).where(User.tg_id.is_not(None))

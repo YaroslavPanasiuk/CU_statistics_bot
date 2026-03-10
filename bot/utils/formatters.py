@@ -1,5 +1,5 @@
 from datetime import datetime
-from bot.lexicon import Lexicon
+from bot.lexicon import Lexicon, select_random_line
 from babel.dates import format_date
 from bot.config import config
 import xml.etree.ElementTree as ET
@@ -52,3 +52,24 @@ def random_bible_verse():
         f"📖 {selection['text']}\n"
         f"📍 {selection['book']} {selection['chapter']}:{selection['verse']}"
     )
+
+def format_all_stats_for_user(stats_list):
+    if not stats_list:
+        return f"Статистика недоступна."
+    keys_set = set()
+    for stat in stats_list:
+        stat_dict = stat[1]
+        keys_set.update(stat_dict.keys())
+    formatted_dict = {key: 0 for key in keys_set}
+    text = f"📊 Твоя статистика за семестр: \n\n"
+    for key in keys_set:
+        for stat in stats_list:
+            stat_dict = stat[1]
+            value = stat_dict.get(key, 0)
+            if value == '' or value is None:
+                value = 0
+            formatted_dict[key] += int(value)
+    for key, value in formatted_dict.items():
+        key_name = select_random_line(f"QUESTION_{key.split('_')[1]}_NAME")
+        text += f"`{(key_name[:23] + '…:') if len(key_name) > 25 else f"{key_name}: ".ljust(25, ".")} {value}`\n"
+    return text

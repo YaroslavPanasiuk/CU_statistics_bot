@@ -6,7 +6,7 @@ from aiogram.fsm.state import StatesGroup, State
 from bot.lexicon import select_random_line, LexiconFilter
 from datetime import datetime, timedelta
 from bot.utils.maths import questions_in_week
-from bot.utils.formatters import week_num_to_dates, random_bible_verse
+from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered, IsRegistered
@@ -140,6 +140,16 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
         
         await message.answer(text)
         await state.set_state(StatisticsCollection.waiting_for_answer)
+
+@registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
+async def get_my_stats(message: types.Message):
+    user_stats = await database.get_all_statistics_for_user(message.from_user.id)
+    
+    if not user_stats:
+        await message.answer(select_random_line('NO_STATS_AVAILABLE'))
+        return
+    
+    await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
 
 
 @registered_router.message(~F.text.startswith("/"))

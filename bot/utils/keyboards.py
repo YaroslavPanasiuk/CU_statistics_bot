@@ -10,6 +10,7 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     builder = ReplyKeyboardBuilder()
     builder.button(text=select_random_line('FILL_STATISTICS'))
     builder.button(text=select_random_line('SELECT_PREVIOUS_WEEK'))
+    builder.button(text=select_random_line('GET_MY_STATS'))
     
     builder.adjust(1)
     

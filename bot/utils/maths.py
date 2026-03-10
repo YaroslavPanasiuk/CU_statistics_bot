@@ -22,6 +22,9 @@ def number_to_excel_column(num: int):
     return result
 
 def week_to_column_coords(week:int):
+    return f"{number_to_excel_column(week_to_indices(week[0])+1)} {number_to_excel_column(week_to_indices(week[1]))}"
+
+def week_to_indices(week:int):
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
     end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
     if start_week > week or end_week < week:
@@ -32,6 +35,6 @@ def week_to_column_coords(week:int):
     for i in range(week - start_week):
         result += int(pattern[i% len(pattern)]) 
         index = i+1
-    return f"{number_to_excel_column(result)} {number_to_excel_column(result+int(pattern[index % len(pattern)]) - 1)}"
+    return [result-1, result+int(pattern[index % len(pattern)]) - 1]
 
 

@@ -3,7 +3,7 @@ import gspread
 from bot.config import config
 from datetime import datetime
 from bot.db import database
-from bot.utils.maths import week_to_column_coords, questions_in_week
+from bot.utils.maths import week_to_column_coords, week_to_indices, questions_in_week
 
 def load_volunteer_list():
         try:
@@ -43,7 +43,8 @@ async def export_stats_to_sheet(tg_id, week):
         worksheet.batch_update([{
             'range': range,
             'values': [list(stats[0][1].values())]
-        }])
+        }]
+        , value_input_option='USER_ENTERED')
         
         
     except Exception as e:
@@ -69,7 +70,8 @@ async def import_stats_from_sheet():
             print(f"Skipping {volunteer_name} - not registered")
             continue
         for i in range(current_week-start_week+1):
-            stats = row[i + 2:i + 2 + questions_in_week(i+ start_week)]
+
+            stats = row[week_to_indices(i + start_week)[0]:week_to_indices(i + start_week)[1]]
             stats_dict = {f"answer_{i+1}": stats[i] for i in range(len(stats))}
             try:
                 await database.save_user_stats(
@@ -107,3 +109,4 @@ def fetch_users_with_no_stats(week):
         
     except Exception as e:
         print(f"Export failed: {e}")
+
