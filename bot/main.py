@@ -5,7 +5,6 @@ from bot.config import config
 from bot.lexicon import Lexicon
 from bot.handlers import register_handlers
 from bot.db import database
-from bot.utils.formatters import format_all_stats_for_user
 from aiogram.fsm.storage.memory import MemoryStorage
 from bot.utils.spreadsheets import load_volunteer_list, import_stats_from_sheet
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
