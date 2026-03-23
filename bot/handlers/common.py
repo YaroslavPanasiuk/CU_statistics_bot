@@ -60,7 +60,7 @@ async def complete_registration(callback: types.CallbackQuery):
 async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
     await state.update_data(selected_week=week_num)
 
-    await message.answer(select_random_line('SELECTED_WEEK'))
+    await message.answer(f"{select_random_line('SELECTED_WEEK')}{week_num} ({week_num_to_dates(week_num)})")
     await message.answer(
         f"{select_random_line("QUESTION_1")}",
         reply_markup=types.ReplyKeyboardRemove()
@@ -111,6 +111,9 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext):
         await state.clear()
         return
     stats_dict = {k: v for k, v in user_data.items() if k != "selected_week"}
+
+    user = await database.get_user_by_tg_id(message.from_user.id)
+    print(f"User {user.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
     
     await database.save_user_stats(
         tg_id=message.from_user.id,
