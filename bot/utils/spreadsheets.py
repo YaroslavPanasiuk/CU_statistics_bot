@@ -59,7 +59,15 @@ async def import_stats_from_sheet():
 
         values = worksheet.get_all_values()
         start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
+        end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
         current_week= datetime.now().isocalendar()[1]
+        if current_week > end_week:
+            print(f"Current week {current_week} is greater than end week {end_week}. No stats to import.")
+            return
+        if current_week < start_week:
+            print(f"Current week {current_week} is less than start week {start_week}. No stats to import.")
+            return
+
     except Exception as e:
         print(f"Import failed: {e}")
 
