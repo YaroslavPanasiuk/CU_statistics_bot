@@ -11,6 +11,7 @@ from bot.utils.maths import check_week_in_range
 
 async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
     if check_week_in_range() is False:
+        print("Current week is out of the allowed range. No reminders will be sent.")
         return
     if user_ids is None:
         current_week = datetime.now().isocalendar()[1]
