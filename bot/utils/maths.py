@@ -6,8 +6,7 @@ def questions_in_week(current_week=None):
         now = datetime.now()
         current_week= now.isocalendar()[1]
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
-    end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
-    if start_week > current_week or end_week < current_week:
+    if check_week_in_range(current_week) is False:
         return 0
     pattern = Lexicon.QUESTION_PATTERN
     index = (current_week - start_week) % len(pattern)
@@ -26,8 +25,7 @@ def week_to_column_coords(week:int):
 
 def week_to_indices(week:int):
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
-    end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
-    if start_week > week or end_week < week:
+    if check_week_in_range(week) is False:
         return
     pattern = Lexicon.QUESTION_PATTERN
     result = 3
@@ -37,4 +35,9 @@ def week_to_indices(week:int):
         index = i+1
     return [result-1, result+int(pattern[index % len(pattern)]) - 1]
 
-
+def check_week_in_range(week:int = None):
+    if week is None:
+        week = datetime.now().isocalendar()[1]
+    start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
+    end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
+    return start_week <= week <= end_week

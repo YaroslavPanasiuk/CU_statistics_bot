@@ -10,6 +10,7 @@ from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_a
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered, IsRegistered
+from bot.filters.bot_available import BotAvailable
 from aiogram import F
 from bot.config import Config
 
@@ -23,6 +24,9 @@ class StatisticsCollection(StatesGroup):
 registered_router = Router()
 router = Router()
 registered_router.message.filter(IsRegistered())
+unavailable_router = Router()
+unavailable_router.message.filter(~BotAvailable())
+
 
 
 @router.message(CommandStart())
@@ -158,6 +162,10 @@ async def get_my_stats(message: types.Message):
 @registered_router.message(~F.text.startswith("/"))
 async def default_handler(message: types.Message):
     await message.answer(random_bible_verse())
+
+@unavailable_router.message()
+async def bot_unavailable(message: types.Message):
+    await message.answer(select_random_line('BOT_UNAVAILABLE'))
 
 @router.message()
 async def not_registered(message: types.Message):

@@ -7,8 +7,11 @@ from bot.utils.keyboards import get_main_menu_keyboard
 from bot.utils.spreadsheets import fetch_users_with_no_stats
 from datetime import datetime
 from bot.config import config
+from bot.utils.maths import check_week_in_range
 
 async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
+    if check_week_in_range() is False:
+        return
     if user_ids is None:
         current_week = datetime.now().isocalendar()[1]
         user_names = fetch_users_with_no_stats(current_week)
@@ -33,3 +36,4 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
             await bot.send_message(tg_id, "...") 
         except Exception as e:
             print(f"Failed to send to {tg_id}: {e}")
+            

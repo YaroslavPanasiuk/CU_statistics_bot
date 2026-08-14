@@ -116,5 +116,5 @@ def fetch_users_with_no_stats(week):
         
         
     except Exception as e:
-        print(f"Export failed: {e}")
+        print(f"Import failed: {e}")
 
