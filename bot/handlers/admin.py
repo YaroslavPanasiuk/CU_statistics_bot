@@ -9,6 +9,7 @@ from bot.lexicon import select_random_line
 from bot.db import database
 from bot.lexicon import Lexicon
 from bot.utils.keyboards import get_main_menu_keyboard
+from bot.utils.spreadsheets import import_stats_from_sheet
 
 router = Router()
 router.message.filter(IsAdmin())
@@ -138,3 +139,11 @@ async def cmd_list_jobs(message: types.Message, command: CommandObject):
         await message.answer(f"Successfully reloaded config from sheet")
     except Exception as e:
         await message.answer(f"Failed to reload config from sheet: {e}")
+
+@router.message(Command("reload_data"), IsAdmin())
+async def cmd_list_jobs(message: types.Message, command: CommandObject):
+    try:
+        import_stats_from_sheet()
+        await message.answer(f"Successfully reloaded data from sheet")
+    except Exception as e:
+        await message.answer(f"Failed to reload data from sheet: {e}")
