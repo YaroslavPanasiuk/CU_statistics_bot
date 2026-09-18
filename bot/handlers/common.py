@@ -12,6 +12,7 @@ from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered, IsRegistered
 from bot.filters.bot_available import BotAvailable
 from aiogram import F
+from bot.lexicon import Lexicon
 from bot.config import Config
 
 class Registration(StatesGroup):
@@ -73,11 +74,23 @@ async def initiate_stats_questions(message: types.Message, state: FSMContext, we
 
 @registered_router.message(or_f(Command("fill_stats"),LexiconFilter("FILL_STATISTICS")))
 async def cmd_fill_stats(message: types.Message, state: FSMContext):
+    if datetime.now() < datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y"):
+        await message.answer(select_random_line('SEMESTER_NOT_STARTED'))
+        return
+    if datetime.now() > datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y"):
+        await message.answer(select_random_line('SEMESTER_OVER'))
+        return
     current_week = (datetime.now() - timedelta(days=Config.LAG_TRESHOLD_DAYS)).isocalendar()[1]
     await initiate_stats_questions(message, state, current_week)
 
 @registered_router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
 async def start_old_stats(message: types.Message, state: FSMContext):
+    if datetime.now() < datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y"):
+            await message.answer(select_random_line('SEMESTER_NOT_STARTED'))
+            return
+    if datetime.now() > datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y"):
+        await message.answer(select_random_line('SEMESTER_OVER'))
+        return
     kb = await get_weeks_keyboard(message.from_user.id)
     await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)

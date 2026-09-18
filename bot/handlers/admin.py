@@ -133,4 +133,8 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
 
 @router.message(Command("reload_config"), IsAdmin())
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
-    Lexicon.load_from_sheet()
+    try:
+        Lexicon.load_from_sheet()
+        await message.answer(f"Successfully reloaded config from sheet")
+    except Exception as e:
+        await message.answer(f"Failed to reload config from sheet: {e}")
