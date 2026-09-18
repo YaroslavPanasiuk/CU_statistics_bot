@@ -163,7 +163,7 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
 
 @registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
 async def get_my_stats(message: types.Message):
-    user_stats = await database.get_all_statistics_for_user(message.from_user.id)
+    user_stats = await database.get_all_statistics_for_user(message.from_user.id, datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1], datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1])
     
     if not user_stats:
         await message.answer(select_random_line('NO_STATS_AVAILABLE'))

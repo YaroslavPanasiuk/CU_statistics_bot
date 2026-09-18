@@ -137,11 +137,11 @@ async def get_user_statistics(tg_id, week):
         result = await session.execute(stmt)
         return result.all()
     
-async def get_all_statistics_for_user(tg_id):
+async def get_all_statistics_for_user(tg_id, start_week=0, end_week=53):
     async with Session() as session:
         stmt = select(User.full_name, UserStats.stats, UserStats.week).join(
             User, User.tg_id == UserStats.tg_id
-        ).where(User.tg_id == tg_id)
+        ).where(and_(User.tg_id == tg_id, UserStats.week >= start_week, UserStats.week <= end_week))
         result = await session.execute(stmt)
         return result.all()
     

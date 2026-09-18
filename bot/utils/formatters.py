@@ -58,6 +58,7 @@ def format_all_stats_for_user(stats_list):
         return f"Статистика недоступна."
     keys_set = set()
     for stat in stats_list:
+
         stat_dict = stat[1]
         keys_set.update(stat_dict.keys())
     formatted_dict = {key: 0 for key in keys_set}
@@ -65,10 +66,11 @@ def format_all_stats_for_user(stats_list):
     for key in keys_set:
         for stat in stats_list:
             stat_dict = stat[1]
-            value = stat_dict.get(key, 0)
-            if value == '' or value is None:
+            try:
+                value = int(stat_dict.get(key, 0))
+            except Exception:
                 value = 0
-            formatted_dict[key] += int(value)
+            formatted_dict[key] += value
     for key, value in formatted_dict.items():
         key_name = select_random_line(f"QUESTION_{key.split('_')[1]}_NAME")
         text += f"`{(key_name[:23] + '…:') if len(key_name) > 25 else f"{key_name}: ".ljust(25, ".")} {value}`\n"
