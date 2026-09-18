@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.filters import Command, CommandObject
 from bot.lexicon import select_random_line
 from bot.db import database
+from bot.lexicon import Lexicon
 from bot.utils.keyboards import get_main_menu_keyboard
 
 router = Router()
@@ -129,3 +130,7 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
         await message.answer(f"User {full_name} has been registered with tg_id {tg_id}.")
     else:        
         await message.answer(f"Failed to register user {full_name} with tg_id {tg_id}.")
+
+@router.message(Command("reload_config"), IsAdmin())
+async def cmd_list_jobs(message: types.Message, command: CommandObject):
+    Lexicon.load_from_sheet()
