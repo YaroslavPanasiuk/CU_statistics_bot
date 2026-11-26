@@ -9,7 +9,7 @@ from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
-from bot.filters.is_registered import IsRegistered
+from bot.filters.is_registered import IsNotRegistered, IsRegistered
 from bot.filters.bot_available import BotAvailable
 from aiogram import F
 from bot.lexicon import Lexicon
@@ -23,8 +23,18 @@ class StatisticsCollection(StatesGroup):
     waiting_for_answer = State()
 
 registered_router = Router()
-router = Router()
 registered_router.message.filter(IsRegistered())
+
+# Unregistered users only: this router ends in a "you are not registered"
+# catch-all, which previously answered registered users too.
+router = Router()
+router.message.filter(IsNotRegistered())
+
+# Included last, after admin.router, so an unknown-command reply can never
+# shadow an admin command (admins are registered volunteers as well).
+fallback_router = Router()
+fallback_router.message.filter(IsRegistered())
+
 unavailable_router = Router()
 unavailable_router.message.filter(~BotAvailable())
 
@@ -132,7 +142,7 @@ async def get_my_stats(message: types.Message):
     await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
 
 
-@registered_router.message(StatisticsCollection.waiting_for_answer)
+@registered_router.message(StatisticsCollection.waiting_for_answer, F.text & ~F.text.startswith("/"))
 async def process_any_answer(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_index = get_next_question_index(data)
@@ -194,3 +204,10 @@ async def bot_unavailable(message: types.Message):
 @router.message()
 async def not_registered(message: types.Message):
     await message.answer(select_random_line('NOT_REGISTERED'))
+
+
+@fallback_router.message(F.text.startswith("/"))
+async def unknown_command(message: types.Message):
+    # TODO(phase-7): move this string into the config sheet with the other
+    # hardcoded Ukrainian text.
+    await message.answer("Невідома команда.", reply_markup=get_main_menu_keyboard())

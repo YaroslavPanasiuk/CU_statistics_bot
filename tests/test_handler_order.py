@@ -5,6 +5,8 @@ are catch-alls. In particular `process_any_answer` matches *any* message while
 the user is in StatisticsCollection.waiting_for_answer, so anything that must
 stay usable mid-questionnaire has to be registered above it.
 """
+from types import SimpleNamespace
+
 import pytest
 
 from bot.handlers import admin, common
@@ -12,6 +14,11 @@ from bot.handlers import admin, common
 
 def order(router):
     return [h.callback.__name__ for h in router.message.handlers]
+
+
+def router_filters(router):
+    """Types of the filters applied to every message entering a router."""
+    return [type(f.callback) for f in router.message._handler.filters]
 
 
 class TestRegisteredRouterOrder:
@@ -40,6 +47,34 @@ class TestRegisteredRouterOrder:
         answer_index = names.index("process_any_answer")
         assert menu <= set(names[:answer_index])
 
+    def test_answer_handler_ignores_commands(self):
+        """Regression, with physical evidence in production.
+
+        `process_any_answer` matched *any* message in waiting_for_answer, so a
+        command typed mid-questionnaire was stored as the answer. Row 16820 of
+        the live statistics table is {"answer_1": "/remind_admin"}. Admin
+        commands have to fall through to admin.router instead.
+        """
+        from aiogram import F
+
+        answer_filter = F.text & ~F.text.startswith("/")
+        for command in ("/remind_admin", "/cancel", "/broadcast hello"):
+            assert not answer_filter.resolve(SimpleNamespace(text=command)), command
+
+    def test_answer_handler_accepts_ordinary_text(self):
+        from aiogram import F
+
+        answer_filter = F.text & ~F.text.startswith("/")
+        for answer in ("4", "0", "не знаю"):
+            assert answer_filter.resolve(SimpleNamespace(text=answer)), answer
+
+    def test_answer_handler_ignores_non_text_messages(self):
+        """A sticker used to be stored as a None answer, which later summed as 0."""
+        from aiogram import F
+
+        answer_filter = F.text & ~F.text.startswith("/")
+        assert not answer_filter.resolve(SimpleNamespace(text=None))
+
     def test_answer_catch_all_precedes_the_bible_verse_fallback(self, names):
         assert names.index("process_any_answer") < names.index("default_handler")
 
@@ -67,6 +102,24 @@ class TestRouterInclusionOrder:
         included = list(dispatcher.sub_routers)
         assert included.index(common.registered_router) < included.index(common.router)
         assert included.index(admin.router) < included.index(common.router)
+
+    def test_registered_fallback_is_included_after_admin_router(self, dispatcher):
+        """The unknown-command reply must not shadow admin commands: admins
+        are registered volunteers, so a catch-all on registered_router would
+        swallow every one of them."""
+        included = list(dispatcher.sub_routers)
+        assert included.index(admin.router) < included.index(common.fallback_router)
+        assert included[-1] is common.fallback_router
+
+    def test_each_router_declares_its_audience(self):
+        """`router` ends in a "you are not registered" catch-all but carried no
+        filter at all, so registered users sending an unknown command were
+        told they were not registered."""
+        from bot.filters.is_registered import IsNotRegistered, IsRegistered
+
+        assert router_filters(common.router) == [IsNotRegistered]
+        assert router_filters(common.registered_router) == [IsRegistered]
+        assert router_filters(common.fallback_router) == [IsRegistered]
 
     def test_unavailable_router_is_still_not_registered(self, dispatcher):
         """Known gap (Phase 4): BotAvailable has no effect because this router
