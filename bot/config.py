@@ -14,7 +14,7 @@ class Config:
     LOCALE = "uk"
     TIMEZONE = os.getenv("TZ")
     LAG_TRESHOLD_DAYS = 3
-    
+
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN not found in .env file")
 

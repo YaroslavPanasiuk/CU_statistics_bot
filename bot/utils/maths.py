@@ -31,7 +31,7 @@ def week_to_indices(week:int):
     result = 3
     index = 0
     for i in range(week - start_week):
-        result += int(pattern[i% len(pattern)]) 
+        result += int(pattern[i% len(pattern)])
         index = i+1
     return [result-1, result+int(pattern[index % len(pattern)]) - 1]
 

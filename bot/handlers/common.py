@@ -9,7 +9,7 @@ from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user
 from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
-from bot.filters.is_registered import IsNotRegistered, IsRegistered
+from bot.filters.is_registered import IsRegistered
 from bot.filters.bot_available import BotAvailable
 from aiogram import F
 from bot.lexicon import Lexicon
@@ -33,7 +33,7 @@ unavailable_router.message.filter(~BotAvailable())
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
     unregistered = await database.get_unregistered_users()
-    
+
     if not unregistered:
         await message.answer("Всі волонтери вже зареєстровані.")
         return
@@ -51,10 +51,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def complete_registration(callback: types.CallbackQuery):
     user_db_id = int(callback.data.split("_")[1])
     tg_id = callback.from_user.id
-    
+
     success = await database.register_user(user_db_id, tg_id)
     user = await database.get_user_by_tg_id(tg_id)
-    
+
     if success:
         await callback.message.edit_text(select_random_line('REGISTRATION_COMPLETE').format(user.full_name.split()[1]))
     else:
@@ -97,16 +97,16 @@ async def start_old_stats(message: types.Message, state: FSMContext):
 
 @registered_router.callback_query(StatisticsCollection.waiting_for_week, WeekCallback.filter())
 async def process_week_callback(
-    callback: types.CallbackQuery, 
-    callback_data: WeekCallback, 
+    callback: types.CallbackQuery,
+    callback_data: WeekCallback,
     state: FSMContext
 ):
     week_num = callback_data.number
-    
+
     await callback.message.edit_text(f"{select_random_line('SELECTED_WEEK')} {week_num} ({week_num_to_dates(week_num)})")
-    
+
     await initiate_stats_questions(callback.message, state, week_num)
-    
+
     await callback.answer()
 
 
@@ -114,14 +114,14 @@ async def process_week_callback(
 async def process_any_answer(message: types.Message, state: FSMContext):
     data = await state.get_data()
     current_index = get_next_question_index(data)
-    
+
     await state.update_data({f"answer_{current_index}": message.text})
     await ask_next_question_or_finish(message, state)
 
 
 async def finalize_and_save_stats(message: types.Message, state: FSMContext):
     user_data = await state.get_data()
-    
+
     week_num = user_data.get("selected_week")
     if not week_num:
         await message.answer("Error: Week data missing. Please restart.")
@@ -131,13 +131,13 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext):
 
     user = await database.get_user_by_tg_id(message.from_user.id)
     print(f"User {user.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
-    
+
     await database.save_user_stats(
         tg_id=message.from_user.id,
         week=week_num,
         data_dict=stats_dict
     )
-    
+
     await message.answer(select_random_line('STATISTICS_GATHERED'), reply_markup=get_main_menu_keyboard())
     await state.clear()
     await export_stats_to_sheet(message.from_user.id, week_num)
@@ -151,24 +151,24 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
     data = await state.get_data()
     week = data.get('selected_week')
     next_index = get_next_question_index(data)
-    
+
     if next_index > questions_in_week(week):
         await finalize_and_save_stats(message, state)
     else:
         question_key = f"QUESTION_{next_index}"
         text = select_random_line(question_key)
-        
+
         await message.answer(text)
         await state.set_state(StatisticsCollection.waiting_for_answer)
 
 @registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
 async def get_my_stats(message: types.Message):
     user_stats = await database.get_all_statistics_for_user(message.from_user.id, datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1], datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1])
-    
+
     if not user_stats:
         await message.answer(select_random_line('NO_STATS_AVAILABLE'))
         return
-    
+
     await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
 
 

@@ -1,5 +1,5 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
-from datetime import datetime, timedelta
+from datetime import datetime
 from bot.lexicon import Lexicon, select_random_line
 from bot.utils.formatters import week_num_to_dates
 from aiogram.filters.callback_data import CallbackData
@@ -11,9 +11,9 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
     builder.button(text=select_random_line('FILL_STATISTICS'))
     builder.button(text=select_random_line('SELECT_PREVIOUS_WEEK'))
     builder.button(text=select_random_line('GET_MY_STATS'))
-    
+
     builder.adjust(1)
-    
+
     return builder.as_markup(
         resize_keyboard=True,
         is_persistent=True,
@@ -36,14 +36,14 @@ async def get_weeks_keyboard(tg_id):
             text=f"Тиждень {i} ({week_num_to_dates(i)}) - {stats_str}",
             callback_data=WeekCallback(number=i).pack()
         )
-    
+
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
 
-def get_unregistered_keyboard(users):    
+def get_unregistered_keyboard(users):
     builder = InlineKeyboardBuilder()
     for user in users:
         builder.button(text=user.full_name, callback_data=f"reg_{user.id}")
-    
+
     builder.adjust(2)
     return builder.as_markup()

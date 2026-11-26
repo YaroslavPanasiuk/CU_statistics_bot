@@ -5,10 +5,8 @@ from bot.filters.is_admin import IsAdmin
 from bot.utils.schedulers import send_weekly_reminder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.filters import Command, CommandObject
-from bot.lexicon import select_random_line
 from bot.db import database
 from bot.lexicon import Lexicon
-from bot.utils.keyboards import get_main_menu_keyboard
 from bot.utils.spreadsheets import import_stats_from_sheet
 
 router = Router()
@@ -18,7 +16,7 @@ router.message.filter(IsAdmin())
 @router.message(Command("list_jobs"), IsAdmin())
 async def cmd_list_jobs(message: types.Message, scheduler: AsyncIOScheduler):
     jobs = scheduler.get_jobs()
-    
+
     if not jobs:
         await message.answer("No active scheduled jobs.")
         return
@@ -70,14 +68,14 @@ async def cmd_broadcast(message: types.Message, command: CommandObject, bot: Bot
 
     user_ids = await database.get_all_registered_ids()
     count = 0
-    
+
     await message.answer(f"🚀 Starting broadcast to {len(user_ids)} users...")
 
     for tg_id in user_ids:
         try:
             await bot.send_message(tg_id, command.args)
             count += 1
-            await asyncio.sleep(0.05) 
+            await asyncio.sleep(0.05)
         except Exception as e:
             print(f"Failed to send to {tg_id}: {e}")
 
@@ -99,7 +97,7 @@ async def cmd_unregister_user(message: types.Message, command: CommandObject):
             return
         await message.answer(f"No user found with tg_id {tg_id}.")
         return
-    
+
     user = await database.get_user_by_full_name(arg)
     if user and user.tg_id:
         success = await database.unregister_user(user.tg_id)
@@ -129,14 +127,14 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
     success = await database.register_user(user.id, tg_id)
     if success:
         await message.answer(f"User {full_name} has been registered with tg_id {tg_id}.")
-    else:        
+    else:
         await message.answer(f"Failed to register user {full_name} with tg_id {tg_id}.")
 
 @router.message(Command("reload_config"), IsAdmin())
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
     try:
         Lexicon.load_from_sheet()
-        await message.answer(f"Successfully reloaded config from sheet")
+        await message.answer("Successfully reloaded config from sheet")
     except Exception as e:
         await message.answer(f"Failed to reload config from sheet: {e}")
 
@@ -144,6 +142,6 @@ async def cmd_list_jobs(message: types.Message, command: CommandObject):
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
     try:
         import_stats_from_sheet()
-        await message.answer(f"Successfully reloaded data from sheet")
+        await message.answer("Successfully reloaded data from sheet")
     except Exception as e:
         await message.answer(f"Failed to reload data from sheet: {e}")

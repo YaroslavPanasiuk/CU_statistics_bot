@@ -20,23 +20,23 @@ def week_num_to_dates(week:int):
 def random_bible_verse():
     tree = ET.parse("bot/res/Bible.xml")
     root = tree.getroot()
-    
+
     all_data = []
 
     for testament in root.findall('testament'):
         t_name = testament.get('name')
-        
+
         for book in testament.findall('book'):
             b_num = book.get('number')
             b_name = BIBLE_BOOKS_UA.get(b_num, f"Книга {b_num}")
-            
+
             for chapter in book.findall('chapter'):
                 c_num = chapter.get('number')
-                
+
                 for verse in chapter.findall('verse'):
                     v_num = verse.get('number')
                     v_text = verse.text
-                    
+
                     all_data.append({
                         "testament": t_name,
                         "book": b_name,
@@ -47,7 +47,7 @@ def random_bible_verse():
 
     # Pick a random entry
     selection = random.choice(all_data)
-    
+
     return (
         f"📖 {selection['text']}\n"
         f"📍 {selection['book']} {selection['chapter']}:{selection['verse']}"
@@ -55,14 +55,14 @@ def random_bible_verse():
 
 def format_all_stats_for_user(stats_list):
     if not stats_list:
-        return f"Статистика недоступна."
+        return "Статистика недоступна."
     keys_set = set()
     for stat in stats_list:
 
         stat_dict = stat[1]
         keys_set.update(stat_dict.keys())
     formatted_dict = {key: 0 for key in keys_set}
-    text = f"📊 Твоя статистика за семестр: \n\n"
+    text = "📊 Твоя статистика за семестр: \n\n"
     for key in keys_set:
         for stat in stats_list:
             stat_dict = stat[1]

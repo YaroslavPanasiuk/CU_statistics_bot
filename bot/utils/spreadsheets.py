@@ -9,13 +9,13 @@ def load_volunteer_list():
         try:
             gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
             sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-            
+
             worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
-            
+
             records = worksheet.get_all_values()
 
             return [item[1] for item in records[2:-1]]
-        
+
         except Exception as e:
             print(f"Failed to load strings from Google Sheets: {e}")
 
@@ -45,8 +45,8 @@ async def export_stats_to_sheet(tg_id, week):
             'values': [list(stats[0][1].values())]
         }]
         , value_input_option='USER_ENTERED')
-        
-        
+
+
     except Exception as e:
         print(f"Export failed: {e}")
 
@@ -87,10 +87,10 @@ async def import_stats_from_sheet():
                     week=i + start_week,
                     data_dict=stats_dict
                 )
-            except Exception as e:                    
+            except Exception as e:
                 print(f"Failed to save stats for {volunteer_name} in week {i + start_week}: {e}")
 
-    
+
 
 def fetch_users_with_no_stats(week):
     try:
@@ -102,7 +102,7 @@ def fetch_users_with_no_stats(week):
         start_column = "B"
         range = f"{start_column}1:{end_column}1000"
         question_count = questions_in_week(week)
-        
+
         records = worksheet.get_values(range_name=range)
         records = records[2:]
         volunteers = [record[0] for record in records]
@@ -113,8 +113,8 @@ def fetch_users_with_no_stats(week):
                 result.append(volunteer)
         return result
 
-        
-        
+
+
     except Exception as e:
         print(f"Import failed: {e}")
 

@@ -13,7 +13,7 @@ class Base(DeclarativeBase):
 
 class User(Base):
     __tablename__ = "volunteers"
-    
+
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     full_name: Mapped[str] = mapped_column(unique=True)
     tg_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, nullable=True)
@@ -30,8 +30,8 @@ class UserStats(Base):
     week: Mapped[int] = mapped_column()
     stats: Mapped[dict] = mapped_column(JSONB, default={})
     last_modified: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), 
-        server_default=func.now(), 
+        DateTime(timezone=True),
+        server_default=func.now(),
         onupdate=func.now()
     )
 
@@ -56,7 +56,7 @@ async def get_user_by_full_name(full_name: str) -> User | None:
         stmt = select(User).where(User.full_name == full_name)
         result = await session.execute(stmt)
         return result.scalar_one_or_none()
-    
+
 async def is_user_registered(tg_id: int) -> bool:
     async with Session() as session:
         stmt = select(User).where(User.tg_id == tg_id)
@@ -71,7 +71,7 @@ async def save_user_stats(tg_id: int, week: int, data_dict: dict):
             week=week,
             stats=data_dict
         )
-        
+
         upsert_stmt = stmt.on_conflict_do_update(
             constraint='_user_week_uc',
             set_=dict(
@@ -79,7 +79,7 @@ async def save_user_stats(tg_id: int, week: int, data_dict: dict):
                 last_modified=func.now()
             )
         )
-        
+
         await session.execute(upsert_stmt)
         await session.commit()
 
@@ -88,7 +88,7 @@ async def sync_volunteers(names_list: list[str]):
         for name in names_list:
             stmt = insert(User).values(full_name=name)
             stmt = stmt.on_conflict_do_nothing(index_elements=['full_name'])
-            
+
             await session.execute(stmt)
 
             stmt = delete(User).where(
@@ -96,13 +96,13 @@ async def sync_volunteers(names_list: list[str]):
             )
             await session.execute(stmt)
             await session.commit()
-        
+
         await session.commit()
 
 async def register_user(user_db_id: int, tg_id: int) -> bool:
     async with Session() as session:
         user = await session.get(User, user_db_id)
-        
+
         if user and user.tg_id is None:
             user.tg_id = tg_id
             await session.commit()
@@ -114,13 +114,13 @@ async def unregister_user(tg_id: int) -> bool:
         stmt = select(User).where(User.tg_id == tg_id)
         response = await session.execute(stmt)
         user = response.scalar_one_or_none()
-        
+
         if user:
             user.tg_id = None
             await session.commit()
             return True
         return False
-    
+
 async def export_data():
     async with Session() as session:
         stmt = select(User.full_name, UserStats.week, UserStats.stats, UserStats.last_modified).join(
@@ -128,7 +128,7 @@ async def export_data():
         )
         result = await session.execute(stmt)
         return result.all()
-    
+
 async def get_user_statistics(tg_id, week):
     async with Session() as session:
         stmt = select(User.full_name, UserStats.stats, UserStats.last_modified).join(
@@ -136,7 +136,7 @@ async def get_user_statistics(tg_id, week):
         ).where(and_(User.tg_id == tg_id, UserStats.week == week))
         result = await session.execute(stmt)
         return result.all()
-    
+
 async def get_all_statistics_for_user(tg_id, start_week=0, end_week=53):
     async with Session() as session:
         stmt = select(User.full_name, UserStats.stats, UserStats.week).join(
@@ -144,14 +144,14 @@ async def get_all_statistics_for_user(tg_id, start_week=0, end_week=53):
         ).where(and_(User.tg_id == tg_id, UserStats.week >= start_week, UserStats.week <= end_week))
         result = await session.execute(stmt)
         return result.all()
-    
+
 async def get_all_registered_ids() -> list[int]:
     async with Session() as session:
         stmt = select(User.tg_id).where(User.tg_id.is_not(None))
         result = await session.execute(stmt)
-        
+
         return list(result.scalars().all())
-    
+
 async def get_users_with_no_stats(week: int):
     async with Session() as session:
         stmt_filled = select(UserStats.tg_id).where(UserStats.week == week)
@@ -161,6 +161,6 @@ async def get_users_with_no_stats(week: int):
             User.tg_id != None,
             not_(User.tg_id.in_(filled_ids))
         )
-        
+
         result = await session.execute(stmt)
         return result.scalars().all()

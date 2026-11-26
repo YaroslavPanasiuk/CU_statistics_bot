@@ -23,7 +23,7 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
             user = await database.get_user_by_tg_id(tg_id)
             await bot.send_message(
                 tg_id,
-                select_random_line(f"REMINDER{level}").format(user.full_name.split()[-1]), 
+                select_random_line(f"REMINDER{level}").format(user.full_name.split()[-1]),
                 reply_markup=get_main_menu_keyboard(),
                 parse_mode="HTML"
             )
@@ -34,7 +34,6 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
             print(f"User {tg_id} blocked the bot.")
         except TelegramRetryAfter as e:
             await asyncio.sleep(e.retry_after)
-            await bot.send_message(tg_id, "...") 
+            await bot.send_message(tg_id, "...")
         except Exception as e:
             print(f"Failed to send to {tg_id}: {e}")
-            
