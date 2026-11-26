@@ -1,0 +1,33 @@
+[project]
+name = "cu-statistics-bot"
+version = "0.1.0"
+description = "Telegram bot that collects weekly volunteer statistics into Postgres and a Google Sheet."
+requires-python = ">=3.13"
+
+[tool.ruff]
+# Matches the Python running in production (see deploy notes in README.md).
+target-version = "py313"
+line-length = 120
+exclude = [".venv", "venv", "bot/res"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes: undefined names, unused imports
+    "W",    # pycodestyle warnings
+    "B",    # bugbear: mutable defaults, except-pass, loop-var shadowing
+    "A",    # builtin shadowing (e.g. `range = ...`)
+    "RUF",  # ruff-specific
+    "ASYNC",# blocking calls in async defs
+    "F841", # unused locals
+]
+ignore = [
+    "E501",     # line length is enforced by the formatter, not the linter
+    "RUF001",   # ambiguous unicode: user-facing strings are Ukrainian (Cyrillic) by design
+    "RUF002",
+    "RUF003",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

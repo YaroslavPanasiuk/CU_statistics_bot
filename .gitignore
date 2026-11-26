@@ -1,5 +1,18 @@
+# Virtualenvs (.venv local, venv on the server — see README.md)
 .venv
 venv
+
+# Secrets
 .env
+
+# Local dev scratch
 shell.nix
 tmp.py
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/

@@ -1,8 +1,8 @@
-aiogram
-python-dotenv
-sqlalchemy
-asyncpg
-greenlet
-gspread
-apscheduler
-babel
+aiogram==3.30.0
+APScheduler==3.11.3
+asyncpg==0.31.0
+babel==2.18.0
+greenlet==3.5.5
+gspread==6.2.1
+python-dotenv==1.2.2
+SQLAlchemy==2.0.52
