@@ -1,6 +1,7 @@
 """Tests for statistics formatting."""
 import pytest
 
+from bot.db.database import WeekStats
 from bot.lexicon import Lexicon
 from bot.utils.formatters import answer_sort_key, format_all_stats_for_user
 
@@ -12,8 +13,8 @@ def question_names(monkeypatch):
 
 
 def row(stats, week=37):
-    """Shape of a get_all_statistics_for_user() row: (full_name, stats, week)."""
-    return ("Волонтер Тест", stats, week)
+    """One row as get_all_statistics_for_user() returns it."""
+    return WeekStats(full_name="Волонтер Тест", stats=stats, week=week)
 
 
 class TestAnswerSortKey:

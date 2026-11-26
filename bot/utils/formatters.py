@@ -70,13 +70,13 @@ def format_all_stats_for_user(stats_list):
         return "Статистика недоступна."
     keys = set()
     for stat in stats_list:
-        keys.update(stat[1].keys())
+        keys.update(stat.stats.keys())
 
     totals = {key: 0 for key in sorted(keys, key=answer_sort_key)}
     for key in totals:
         for stat in stats_list:
             try:
-                value = int(stat[1].get(key, 0))
+                value = int(stat.stats.get(key, 0))
             except Exception:
                 value = 0
             totals[key] += value

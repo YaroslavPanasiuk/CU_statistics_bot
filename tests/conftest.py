@@ -8,7 +8,12 @@ import os
 
 os.environ.setdefault("BOT_TOKEN", "test:token")
 os.environ.setdefault("ADMIN_IDS", "1")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test@localhost/test")
+# Integration tests run against TEST_DATABASE_URL when it is set; unit tests
+# never open a connection, so the placeholder is enough for them.
+os.environ.setdefault(
+    "DATABASE_URL",
+    os.environ.get("TEST_DATABASE_URL") or "postgresql+asyncpg://test@localhost/test",
+)
 os.environ.setdefault("GOOGLE_SHEET_CONFIG_URL", "https://example.invalid/config")
 os.environ.setdefault("GOOGLE_SHEET_URL", "https://example.invalid/data")
 os.environ.setdefault("GOOGLE_CREDS_JSON", "{}")

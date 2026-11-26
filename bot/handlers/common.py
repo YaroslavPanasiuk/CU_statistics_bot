@@ -101,7 +101,8 @@ async def start_old_stats(message: types.Message, state: FSMContext):
     if datetime.now() > datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y"):
         await message.answer(select_random_line('SEMESTER_OVER'))
         return
-    kb = await get_weeks_keyboard(message.from_user.id)
+    user = await database.get_user_by_tg_id(message.from_user.id)
+    kb = await get_weeks_keyboard(user.id)
     await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
@@ -133,7 +134,12 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 
 @registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
 async def get_my_stats(message: types.Message):
-    user_stats = await database.get_all_statistics_for_user(message.from_user.id, datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1], datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1])
+    user = await database.get_user_by_tg_id(message.from_user.id)
+    user_stats = await database.get_all_statistics_for_user(
+        user.id,
+        datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1],
+        datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1],
+    )
 
     if not user_stats:
         await message.answer(select_random_line('NO_STATS_AVAILABLE'))
@@ -165,14 +171,14 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext):
     print(f"User {user.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
 
     await database.save_user_stats(
-        tg_id=message.from_user.id,
+        volunteer_id=user.id,
         week=week_num,
         data_dict=stats_dict
     )
 
     await message.answer(select_random_line('STATISTICS_GATHERED'), reply_markup=get_main_menu_keyboard())
     await state.clear()
-    await export_stats_to_sheet(message.from_user.id, week_num)
+    await export_stats_to_sheet(user, week_num)
 
 
 def get_next_question_index(user_data: dict) -> int:

@@ -31,3 +31,8 @@ ignore = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# One event loop for the whole session: the integration tests share a module
+# fixture that opens pooled connections, and a per-test loop would leave those
+# connections bound to a loop that is already closed.
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"

@@ -9,22 +9,27 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from bot.utils.spreadsheets import load_volunteer_list, import_stats_from_sheet
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from bot.utils.schedulers import send_weekly_reminder
-from datetime import datetime
-from bot.utils.schedulers import fetch_users_with_no_stats
 
 async def main():
     print('Loading lexicon...')
     Lexicon.load_from_sheet()
     print('Initializing database...')
     await database.init_db()
+
     print('Synchronizing volunteers...')
-    await database.sync_volunteers(load_volunteer_list())
+    try:
+        await database.sync_volunteers(load_volunteer_list())
+    except Exception as e:
+        # A Sheets outage must not take the bot offline. load_volunteer_list
+        # raises rather than returning an empty roster -- which sync_volunteers
+        # would read as "delete every volunteer" -- so carry on with whatever
+        # roster the database already holds. With Restart=always, raising here
+        # would mean a restart loop every 5 seconds.
+        print(f"Volunteer sync skipped, continuing with the stored roster: {e}")
+
     print('Importing statistics...')
     await import_stats_from_sheet()
-    print('...')
-    current_week = datetime.now().isocalendar()[1]
-    user_names = fetch_users_with_no_stats(current_week)
-    print(current_week)
+
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher(storage=MemoryStorage())
     register_handlers(dp)
@@ -38,9 +43,16 @@ async def main():
     scheduler.start()
 
     print('bot started')
-    await dp.start_polling(bot)
+    try:
+        await dp.start_polling(bot)
+    finally:
+        # systemd sends SIGTERM on restart. Close everything so Telegram
+        # releases the long poll instead of holding it for several seconds,
+        # and so Postgres connections are returned rather than dropped.
+        print('shutting down...')
+        scheduler.shutdown(wait=False)
+        await bot.session.close()
+        await database.dispose_db()
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-

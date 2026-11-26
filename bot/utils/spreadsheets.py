@@ -36,8 +36,7 @@ def volunteer_names(values: list[list[str]]) -> list[str]:
             names.append(name)
     return names
 
-async def volunteer_to_row_coord(tg_id):
-    volunteer = await database.get_user_by_tg_id(tg_id)
+async def volunteer_to_row_coord(volunteer):
     volunteers = load_volunteer_list()
     for i, v in enumerate(volunteers):
          if volunteer.full_name == v:
@@ -45,20 +44,20 @@ async def volunteer_to_row_coord(tg_id):
     return -1
 
 
-async def export_stats_to_sheet(tg_id, week):
+async def export_stats_to_sheet(volunteer, week):
     try:
-        stats = await database.get_user_statistics(week=week, tg_id=tg_id)
+        stats = await database.get_user_statistics(volunteer_id=volunteer.id, week=week)
         gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
         sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
         worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
 
-        row = await volunteer_to_row_coord(tg_id)
+        row = await volunteer_to_row_coord(volunteer)
         columns = week_to_column_coords(week)
         range = f"{columns.split()[0]}{row}:{columns.split()[1]}{row}"
 
         worksheet.batch_update([{
             'range': range,
-            'values': [list(stats[0][1].values())]
+            'values': [list(stats[0].stats.values())]
         }]
         , value_input_option='USER_ENTERED')
 
@@ -107,7 +106,7 @@ async def import_stats_from_sheet():
             stats_dict = {f"answer_{n + 1}": value for n, value in enumerate(answers)}
             try:
                 await database.save_user_stats(
-                    tg_id=volunteer.tg_id,
+                    volunteer_id=volunteer.id,
                     week=week,
                     data_dict=stats_dict
                 )

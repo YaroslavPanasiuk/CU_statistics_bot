@@ -23,15 +23,15 @@ def get_main_menu_keyboard() -> ReplyKeyboardMarkup:
 class WeekCallback(CallbackData, prefix="week"):
     number: int
 
-async def get_weeks_keyboard(tg_id):
+async def get_weeks_keyboard(volunteer_id):
     builder = InlineKeyboardBuilder()
     current_week = datetime.now().isocalendar()[1]
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
     for i in range(start_week, current_week+1):
-        stats = await database.get_user_statistics(tg_id, i)
+        stats = await database.get_user_statistics(volunteer_id, i)
         stats_str = "не заповнено"
         if len(stats) > 0:
-            stats_str = ", ".join(list(stats[0][1].values()))
+            stats_str = ", ".join(list(stats[0].stats.values()))
         builder.button(
             text=f"Тиждень {i} ({week_num_to_dates(i)}) - {stats_str}",
             callback_data=WeekCallback(number=i).pack()
