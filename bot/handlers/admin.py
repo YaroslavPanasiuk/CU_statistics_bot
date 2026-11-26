@@ -141,7 +141,7 @@ async def cmd_list_jobs(message: types.Message, command: CommandObject):
 @router.message(Command("reload_data"), IsAdmin())
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
     try:
-        import_stats_from_sheet()
+        await import_stats_from_sheet()
         await message.answer("Successfully reloaded data from sheet")
     except Exception as e:
         await message.answer(f"Failed to reload data from sheet: {e}")

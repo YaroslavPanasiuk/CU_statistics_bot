@@ -84,18 +84,36 @@ async def save_user_stats(tg_id: int, week: int, data_dict: dict):
         await session.commit()
 
 async def sync_volunteers(names_list: list[str]):
+    """Insert new roster names and delete volunteers absent from the roster.
+
+    The sheet is authoritative for who exists, so this deletes -- which makes
+    an empty roster catastrophic: `not_in([])` matches every row. Refuse that
+    case rather than wiping the table and (where the cascade exists) every
+    statistics row with it.
+
+    Previously the delete and the commit sat *inside* the per-name loop, so a
+    30-name roster issued 30 deletes and 30 commits instead of one each.
+    """
+    if not names_list:
+        raise ValueError(
+            "Refusing to sync an empty volunteer roster: this would delete every volunteer."
+        )
+
+    # Preserve order but drop duplicates, so a name repeated in the sheet
+    # cannot turn into two conflicting inserts.
+    names = list(dict.fromkeys(names_list))
+
     async with Session() as session:
-        for name in names_list:
-            stmt = insert(User).values(full_name=name)
-            stmt = stmt.on_conflict_do_nothing(index_elements=['full_name'])
+        stmt = insert(User).values([{"full_name": name} for name in names])
+        stmt = stmt.on_conflict_do_nothing(index_elements=['full_name'])
+        await session.execute(stmt)
 
-            await session.execute(stmt)
-
-            stmt = delete(User).where(
-                User.full_name.not_in(names_list)
-            )
-            await session.execute(stmt)
-            await session.commit()
+        removed = await session.execute(
+            delete(User).where(User.full_name.not_in(names)).returning(User.full_name)
+        )
+        removed_names = list(removed.scalars().all())
+        if removed_names:
+            print(f"sync_volunteers: removed {len(removed_names)} volunteer(s) absent from the sheet: {removed_names}")
 
         await session.commit()
 

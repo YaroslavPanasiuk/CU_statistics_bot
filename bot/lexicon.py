@@ -38,5 +38,11 @@ class LexiconFilter(Filter):
         self.key = key
 
     async def __call__(self, message: Message) -> bool:
-        expected_text = getattr(Lexicon, self.key, None)
-        return message.text == expected_text
+        raw = getattr(Lexicon, self.key, None)
+        if raw is None or message.text is None:
+            return False
+        # Keyboard labels are produced by select_random_line(), which picks one
+        # of the ';;'-separated variants. Comparing against the whole raw value
+        # meant that adding a second variant to a key silently killed its
+        # button: the label no longer equalled the stored string.
+        return message.text in raw.split(';;')

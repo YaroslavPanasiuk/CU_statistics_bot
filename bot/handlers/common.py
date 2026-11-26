@@ -110,6 +110,28 @@ async def process_week_callback(
     await callback.answer()
 
 
+@registered_router.message(Command("cancel"))
+async def cmd_cancel(message: types.Message, state: FSMContext):
+    # TODO(phase-7): move these strings into the config sheet with the other
+    # hardcoded Ukrainian text.
+    if await state.get_state() is None:
+        await message.answer("Немає чого скасовувати.", reply_markup=get_main_menu_keyboard())
+        return
+    await state.clear()
+    await message.answer("Скасовано.", reply_markup=get_main_menu_keyboard())
+
+
+@registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
+async def get_my_stats(message: types.Message):
+    user_stats = await database.get_all_statistics_for_user(message.from_user.id, datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1], datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1])
+
+    if not user_stats:
+        await message.answer(select_random_line('NO_STATS_AVAILABLE'))
+        return
+
+    await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
+
+
 @registered_router.message(StatisticsCollection.waiting_for_answer)
 async def process_any_answer(message: types.Message, state: FSMContext):
     data = await state.get_data()
@@ -160,17 +182,6 @@ async def ask_next_question_or_finish(message: types.Message, state: FSMContext)
 
         await message.answer(text)
         await state.set_state(StatisticsCollection.waiting_for_answer)
-
-@registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
-async def get_my_stats(message: types.Message):
-    user_stats = await database.get_all_statistics_for_user(message.from_user.id, datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1], datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1])
-
-    if not user_stats:
-        await message.answer(select_random_line('NO_STATS_AVAILABLE'))
-        return
-
-    await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
-
 
 @registered_router.message(~F.text.startswith("/"))
 async def default_handler(message: types.Message):

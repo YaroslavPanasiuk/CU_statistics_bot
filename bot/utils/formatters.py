@@ -53,25 +53,36 @@ def random_bible_verse():
         f"📍 {selection['book']} {selection['chapter']}:{selection['verse']}"
     )
 
+def answer_sort_key(key: str) -> tuple[int, int, str]:
+    """Order 'answer_N' keys numerically; keep anything unrecognised last.
+
+    The totals used to be iterated straight off a set, so a user's categories
+    came back in a different order every time they asked for their stats.
+    """
+    parts = key.split("_")
+    if len(parts) > 1 and parts[1].isdigit():
+        return (0, int(parts[1]), "")
+    return (1, 0, key)
+
+
 def format_all_stats_for_user(stats_list):
     if not stats_list:
         return "Статистика недоступна."
-    keys_set = set()
+    keys = set()
     for stat in stats_list:
+        keys.update(stat[1].keys())
 
-        stat_dict = stat[1]
-        keys_set.update(stat_dict.keys())
-    formatted_dict = {key: 0 for key in keys_set}
-    text = "📊 Твоя статистика за семестр: \n\n"
-    for key in keys_set:
+    totals = {key: 0 for key in sorted(keys, key=answer_sort_key)}
+    for key in totals:
         for stat in stats_list:
-            stat_dict = stat[1]
             try:
-                value = int(stat_dict.get(key, 0))
+                value = int(stat[1].get(key, 0))
             except Exception:
                 value = 0
-            formatted_dict[key] += value
-    for key, value in formatted_dict.items():
+            totals[key] += value
+
+    text = "📊 Твоя статистика за семестр: \n\n"
+    for key, value in totals.items():
         key_name = select_random_line(f"QUESTION_{key.split('_')[1]}_NAME")
         text += f"`{(key_name[:23] + '…:') if len(key_name) > 25 else f"{key_name}: ".ljust(25, ".")} {value}`\n"
     return text

@@ -5,20 +5,36 @@ from datetime import datetime
 from bot.db import database
 from bot.utils.maths import week_to_column_coords, week_to_indices, questions_in_week
 
-def load_volunteer_list():
-        try:
-            gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-            sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
+def load_volunteer_list() -> list[str]:
+    """Return the volunteer roster from column B of the data sheet.
 
-            worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
+    Raises on failure. `sync_volunteers` deletes volunteers that are absent
+    from this list, so a Sheets outage must never be mistaken for an empty
+    roster.
+    """
+    gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
+    sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
+    worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
+    return volunteer_names(worksheet.get_all_values())
 
-            records = worksheet.get_all_values()
 
-            return [item[1] for item in records[2:-1]]
+def volunteer_names(values: list[list[str]]) -> list[str]:
+    """Names from column B, skipping the two header rows.
 
-        except Exception as e:
-            print(f"Failed to load strings from Google Sheets: {e}")
-
+    This used to slice `[2:-1]`, assuming the sheet ended in a totals row. It
+    actually ends in blank padding rows, so every blank cell came back as a
+    volunteer named "" -- 42 entries for 29 volunteers, which created an
+    empty-named row in the database that showed up as a blank registration
+    button. Select on a non-empty name instead.
+    """
+    names: list[str] = []
+    for row in values[2:]:
+        if len(row) < 2:
+            continue
+        name = row[1].strip()
+        if name:
+            names.append(name)
+    return names
 
 async def volunteer_to_row_coord(tg_id):
     volunteer = await database.get_user_by_tg_id(tg_id)
@@ -56,39 +72,49 @@ async def import_stats_from_sheet():
         gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
         sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
         worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
-
         values = worksheet.get_all_values()
-        start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
-        end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
-        current_week= datetime.now().isocalendar()[1]
-        if current_week > end_week:
-            print(f"Current week {current_week} is greater than end week {end_week}. No stats to import.")
-            return
-        if current_week < start_week:
-            print(f"Current week {current_week} is less than start week {start_week}. No stats to import.")
-            return
-
     except Exception as e:
+        # The import loop below used to sit outside this try, so a Sheets
+        # failure printed here and then raised NameError on `values`.
         print(f"Import failed: {e}")
+        return
 
-    for row in values[2:-1]:
-        volunteer_name = row[1]
+    start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
+    end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
+    current_week = datetime.now().isocalendar()[1]
+    if current_week > end_week:
+        print(f"Current week {current_week} is greater than end week {end_week}. No stats to import.")
+        return
+    if current_week < start_week:
+        print(f"Current week {current_week} is less than start week {start_week}. No stats to import.")
+        return
+
+    for row in values[2:]:
+        volunteer_name = row[1].strip() if len(row) > 1 else ""
+        if not volunteer_name:
+            continue
         volunteer = await database.get_user_by_full_name(volunteer_name)
+        if volunteer is None:
+            print(f"Skipping {volunteer_name} - not in the database")
+            continue
         if volunteer.tg_id is None:
             print(f"Skipping {volunteer_name} - not registered")
             continue
-        for i in range(current_week-start_week+1):
-
-            stats = row[week_to_indices(i + start_week)[0]:week_to_indices(i + start_week)[1]]
-            stats_dict = {f"answer_{i+1}": stats[i] for i in range(len(stats))}
+        for offset in range(current_week - start_week + 1):
+            week = offset + start_week
+            first_index, last_index = week_to_indices(week)
+            answers = row[first_index:last_index]
+            stats_dict = {f"answer_{n + 1}": value for n, value in enumerate(answers)}
             try:
                 await database.save_user_stats(
                     tg_id=volunteer.tg_id,
-                    week=i + start_week,
+                    week=week,
                     data_dict=stats_dict
                 )
             except Exception as e:
-                print(f"Failed to save stats for {volunteer_name} in week {i + start_week}: {e}")
+                print(f"Failed to save stats for {volunteer_name} in week {week}: {e}")
+
+
 
 
 
