@@ -114,19 +114,27 @@ a throwaway postgres:17 container.
 
 ```bash
 ssh lvivhp && cd ~/Projects/CU_statistics_bot
-DB=$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#postgresql\+asyncpg#postgresql#')
 
-# 0. Pre-flight. Record the starting row count; the expected results below are
-#    relative to it, because volunteers keep submitting until the bot stops.
-psql "$DB" -c "SELECT count(*) AS before FROM statistics;"
+# Each command below is self-contained. Do NOT split a DSN into a `DB=...`
+# variable and use it later: if every command runs in its own shell -- which
+# is what Claude Code's `!` prefix does -- the variable is gone by the next
+# one, psql falls back to a local socket as your own user, and you get
+# 'role "yaros" does not exist'.
+#
+# After step 3, deploy/dsn.sh does this for you: psql "$(deploy/dsn.sh)" ...
+
+# 0. Pre-flight. Note the row count: the checks in step 5 are relative to it,
+#    because volunteers keep submitting until the bot stops.
+psql "$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#^postgresql\+asyncpg#postgresql#')" -c "SELECT count(*) AS before FROM statistics;"
 git status --porcelain | grep -v '\.pyc'      # expect only mode changes
 git diff --numstat -- . ':(exclude)*.pyc'      # expect 0 insertions, 0 deletions
 
 # 1. Back up, and keep the current unit file for rollback.
-pg_dump --no-owner --no-acl "$DB" > ~/custat_pre_migration_$(date +%F).sql
+pg_dump --no-owner --no-acl "$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#^postgresql\+asyncpg#postgresql#')" > ~/custat_pre_migration_$(date +%F).sql
+ls -l ~/custat_pre_migration_*.sql             # sanity: not empty
 cp /etc/systemd/system/CU_statistics_bot.service ~/CU_statistics_bot.service.bak
 
-# 2. Stop the bot. The new code and old schema are not compatible.
+# 2. Stop the bot. The new code and the old schema are not compatible.
 sudo systemctl stop CU_statistics_bot
 
 # 3. Deploy. core.fileMode=false clears the 644->755 drift that otherwise
@@ -142,11 +150,11 @@ venv/bin/python -m alembic upgrade head
 #    Expect: "0002: archived 104 orphaned row(s), deleted 1 command-answer
 #    row(s), removed 104 orphan(s) from statistics"
 
-# 5. Verify before starting anything.
-psql "$DB" -c "SELECT count(*) AS live FROM statistics;"                       # before - 105
-psql "$DB" -c "SELECT count(*) AS archived FROM statistics_archive;"           # 104
-psql "$DB" -c "SELECT count(*) AS unowned FROM statistics WHERE volunteer_id IS NULL;"  # 0
-venv/bin/python -m alembic check                                               # no new operations
+# 5. Verify before starting anything. From 701 rows, expect 596 live.
+psql "$(deploy/dsn.sh)" -c "SELECT count(*) AS live FROM statistics;"
+psql "$(deploy/dsn.sh)" -c "SELECT count(*) AS archived FROM statistics_archive;"
+psql "$(deploy/dsn.sh)" -c "SELECT count(*) AS unowned FROM statistics WHERE volunteer_id IS NULL;"
+venv/bin/python -m alembic check               # "No new upgrade operations detected."
 
 # 6. Drop root. The service user only needs group `users`, which already has
 #    rwx on the project directory, so nothing is chowned.
@@ -169,6 +177,7 @@ Rollback:
 ```bash
 sudo systemctl stop CU_statistics_bot
 venv/bin/python -m alembic downgrade 0001      # restores tg_id and the archived rows
+# or, if that misbehaves:  psql "$(deploy/dsn.sh)" < ~/custat_pre_migration_<date>.sql
 git checkout 2e884be
 sudo cp ~/CU_statistics_bot.service.bak /etc/systemd/system/CU_statistics_bot.service
 sudo systemctl daemon-reload && sudo systemctl start CU_statistics_bot
