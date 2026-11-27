@@ -23,8 +23,8 @@ class FakeBot:
         self.sent.append((chat_id, text))
 
 
-def volunteer(id, name, tg_id):
-    return SimpleNamespace(id=id, full_name=name, tg_id=tg_id)
+def volunteer(volunteer_id, name, tg_id):
+    return SimpleNamespace(id=volunteer_id, full_name=name, tg_id=tg_id)
 
 
 @pytest.fixture(autouse=True)
@@ -55,7 +55,7 @@ def roster(monkeypatch):
     }
 
     async def fetch(week):
-        return list(people) + ["Привид Якийсь"]  # last one is not in the database
+        return [*people, "Привид Якийсь"]  # last one is not in the database
 
     async def by_name(name):
         return people.get(name)
@@ -112,7 +112,7 @@ class TestSendWeeklyReminder:
         bot = FakeBot(fail={111: TelegramForbiddenError(method=None, message="blocked")})
         await schedulers.send_weekly_reminder(bot, 1)
 
-        summary = [text for chat, text in bot.sent if chat == "4242"][0]
+        summary = next(text for chat, text in bot.sent if chat == "4242")
         assert "1 sent, 1 failed" in summary
         assert "blocked the bot" in summary
 
