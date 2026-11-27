@@ -28,7 +28,12 @@ from bot.config import config
 
 logger = logging.getLogger(__name__)
 
-engine = create_async_engine(config.DATABASE_URL)
+# pool_pre_ping, because Postgres runs in a container next to the bot and so
+# restarts independently of it: a docker update, a reboot, a rebind. Without
+# this, every connection left in the pool is dead afterwards and the next query
+# on each one raises before the pool replaces it, so a five-second Postgres
+# restart turns into a scattering of failed interactions.
+engine = create_async_engine(config.DATABASE_URL, pool_pre_ping=True)
 Session = async_sessionmaker(bind=engine)
 
 
