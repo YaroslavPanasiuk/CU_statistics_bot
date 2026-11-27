@@ -4,40 +4,18 @@ import re
 from datetime import datetime
 
 import gspread
+
+from bot import registry
 from bot.config import config
 from aiogram.filters import Filter
 from aiogram.types import Message
 
 logger = logging.getLogger(__name__)
 
-# Keys the bot cannot operate without. QUESTION_N / QUESTION_N_NAME are
-# checked separately, against the question count the pattern implies.
-#
-# Only add a key here after confirming it exists in the live config sheet --
-# `deploy/check_config.py` reports that. NO_STATS_AVAILABLE was added from
-# reading the code alone, was absent from the sheet, and took the bot down in
-# a five-second restart loop on first deploy. Anything that is merely a
-# message belongs in text()/fill_default() with a fallback instead.
-REQUIRED_KEYS = (
-    "START_DATE",
-    "END_DATE",
-    "QUESTION_PATTERN",
-    "WORKSHEET_NAME",
-    "REGISTRATION_COMPLETE",
-    "NOT_REGISTERED",
-    "SELECT_WEEK",
-    "SELECTED_WEEK",
-    "STATISTICS_GATHERED",
-    "BOT_UNAVAILABLE",
-    "SEMESTER_NOT_STARTED",
-    "SEMESTER_OVER",
-    "FILL_STATISTICS",
-    "SELECT_PREVIOUS_WEEK",
-    "GET_MY_STATS",
-    "REMINDER1",
-    "REMINDER2",
-    "REMINDER3",
-)
+# Keys the bot cannot operate without, and the question family that is only
+# required when the schedule asks for it, both come from the registry -- see
+# bot/registry.py for what each key means and why.
+REQUIRED_KEYS = registry.REQUIRED_KEYS
 
 
 class LexiconError(Exception):
@@ -172,10 +150,9 @@ def validate_config() -> None:
 
     # Enough QUESTION_N / QUESTION_N_NAME keys for the busiest week.
     most_questions = max(int(digit) for digit in pattern)
-    for n in range(1, most_questions + 1):
-        for key in (f"QUESTION_{n}", f"QUESTION_{n}_NAME"):
-            if getattr(Lexicon, key, None) in (None, ""):
-                raise LexiconError(
-                    f"QUESTION_PATTERN asks up to {most_questions} questions, "
-                    f"but the config sheet has no {key}"
-                )
+    for key in registry.question_keys(pattern):
+        if getattr(Lexicon, key, None) in (None, ""):
+            raise LexiconError(
+                f"QUESTION_PATTERN asks up to {most_questions} questions, "
+                f"but the config sheet has no {key}"
+            )
