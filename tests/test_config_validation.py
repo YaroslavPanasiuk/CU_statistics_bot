@@ -192,6 +192,46 @@ class TestOptionalStrings:
         monkeypatch.setattr(Lexicon, "GREETING", "Вітаю, {} {oops}", raising=False)
         assert "Вітаю" in fill_default("GREETING", "Привіт, {}!", "Саша")
 
+    SHEET_KEYS: ClassVar[set[str]] = {
+        # Every key present in the production config sheet, 2026-11-27.
+        "QUESTION_1", "QUESTION_2", "QUESTION_3", "QUESTION_4", "QUESTION_5",
+        "QUESTION_1_NAME", "QUESTION_2_NAME", "QUESTION_3_NAME", "QUESTION_4_NAME",
+        "GREETING", "ASK_NAME", "WHY_I_AM_HERE", "SEND_STATISTICS", "WHAT_I_DO",
+        "STATISTICS_GATHERED", "YES", "NO", "FILL_STATISTICS", "MENU",
+        "REGISTRATION_COMPLETE", "SEMESTER_NOT_STARTED", "SEMESTER_OVER",
+        "NOT_REGISTERED", "WRITING", "REMINDER1", "REMINDER2", "REMINDER3",
+        "VALIDATION_FAILED_NUMERIC", "VALIDATION_FAILED_NAME", "REMINDER_LATE",
+        "REMINDER_SORRY", "SELECT_PREVIOUS_WEEK", "GETTING_YOUR_STATISTICS",
+        "QUESTION_PATTERN", "START_DATE", "END_DATE", "SELECT_YOUR_NAME",
+        "SELECT_WEEK", "SELECTED_WEEK", "WORKSHEET_NAME", "GET_MY_STATS",
+        "BOT_UNAVAILABLE", "NO_STATS_AVAILABLE",
+    }
+
+    def test_invented_fallback_keys_do_not_collide_with_sheet_keys(self):
+        """A fallback key that already exists in the sheet silently takes the
+        sheet's value, which means a different message entirely.
+
+        This happened: fill_default('GREETING', "Привіт, {}!") picked up the
+        sheet's GREETING -- a 264-character bot introduction -- so a registered
+        volunteer's /start replied with the whole intro instead of their name.
+        """
+        invented = {
+            "NAME_NOT_RECOGNISED", "GREETING_REGISTERED", "NOTHING_TO_CANCEL",
+            "CANCELLED", "UNREGISTERED", "UNKNOWN_COMMAND", "SESSION_LOST",
+            "NO_STATS_TEXT", "STATS_HEADER", "WEEK_NOT_FILLED", "WEEK_LABEL",
+        }
+        collisions = invented & self.SHEET_KEYS
+        assert not collisions, (
+            f"{collisions} already mean something else in the config sheet; "
+            "pick a distinct key or reuse the sheet's semantics deliberately."
+        )
+
+    def test_reused_sheet_keys_are_deliberate(self):
+        """These fallbacks intentionally target existing sheet keys, so the
+        sheet's own wording wins."""
+        for key in ("VALIDATION_FAILED_NUMERIC", "NO_STATS_AVAILABLE"):
+            assert key in self.SHEET_KEYS
+
     def test_none_of_these_keys_are_required(self):
         """Adding a fallback key to REQUIRED_KEYS would break every existing
         deployment on the next restart."""

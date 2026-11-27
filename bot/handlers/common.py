@@ -111,7 +111,7 @@ async def process_registration_name(message: types.Message, state: FSMContext):
 @registered_router.message(CommandStart())
 async def cmd_start_registered(message: types.Message, state: FSMContext, volunteer: database.User):
     await message.answer(
-        fill_default('GREETING', "Привіт, {}!", display_name(volunteer.full_name)),
+        fill_default('GREETING_REGISTERED', "Привіт, {}!", display_name(volunteer.full_name)),
         reply_markup=get_main_menu_keyboard(),
     )
 
@@ -218,7 +218,7 @@ async def process_any_answer(message: types.Message, state: FSMContext, voluntee
         # Stay on the same question. Unvalidated text used to be stored as-is
         # and silently counted as 0 when the totals were rendered.
         await message.answer(
-            text('ANSWER_MUST_BE_A_NUMBER', "Введи, будь ласка, число — наприклад 0 або 3.")
+            text('VALIDATION_FAILED_NUMERIC', "Введи, будь ласка, число — наприклад 0 або 3.")
         )
         return
 
