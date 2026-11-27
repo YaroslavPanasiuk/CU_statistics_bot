@@ -94,3 +94,42 @@ class TestMiddlewareIsRegisteredOuter:
         """It has to be outer, or router filters would run before the lookup."""
         outer = [type(m) for m in dispatcher.update.outer_middleware]
         assert VolunteerMiddleware in outer
+
+
+class TestIsAdmin:
+    """IsAdmin guards both messages and the broadcast confirmation callback."""
+
+    @pytest.fixture(autouse=True)
+    def admins(self, monkeypatch):
+        from bot import config as config_module
+
+        monkeypatch.setattr(config_module.config, "ADMIN_IDS", (42, 43), raising=False)
+
+    def event(self, user_id):
+        return SimpleNamespace(from_user=SimpleNamespace(id=user_id) if user_id else None)
+
+    async def test_admins_pass(self):
+        from bot.filters.is_admin import IsAdmin
+
+        assert await IsAdmin()(self.event(42)) is True
+        assert await IsAdmin()(self.event(43)) is True
+
+    async def test_non_admins_do_not(self):
+        from bot.filters.is_admin import IsAdmin
+
+        assert await IsAdmin()(self.event(7)) is False
+
+    async def test_an_event_without_a_user_does_not_raise(self):
+        from bot.filters.is_admin import IsAdmin
+
+        assert await IsAdmin()(self.event(None)) is False
+
+    def test_its_parameter_cannot_collide_with_middleware_data(self):
+        """aiogram passes the event positionally and also supplies any
+        parameter whose name matches a data key, so a parameter called
+        `event` or `message` risks being passed twice."""
+        from aiogram.dispatcher.event.handler import FilterObject
+
+        from bot.filters.is_admin import IsAdmin
+
+        assert FilterObject(IsAdmin()).params == {"telegram_event"}

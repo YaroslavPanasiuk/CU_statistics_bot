@@ -181,15 +181,22 @@ async def get_my_stats(message: types.Message, volunteer: database.User):
         await message.answer(select_random_line('NO_STATS_AVAILABLE'))
         return
 
-    await message.answer(format_all_stats_for_user(user_stats), parse_mode="MarkdownV2")
+    await message.answer(format_all_stats_for_user(user_stats), parse_mode="HTML")
 
 
 @registered_router.message(StatisticsCollection.waiting_for_answer, F.text & ~F.text.startswith("/"))
 async def process_any_answer(message: types.Message, state: FSMContext, volunteer: database.User):
+    answer = parse_answer(message.text)
+    if answer is None:
+        # Stay on the same question. Unvalidated text used to be stored as-is
+        # and silently counted as 0 when the totals were rendered.
+        # TODO(phase-7): move this string into the config sheet.
+        await message.answer("Введи, будь ласка, число — наприклад 0 або 3.")
+        return
+
     data = await state.get_data()
     current_index = get_next_question_index(data)
-
-    await state.update_data({f"answer_{current_index}": message.text})
+    await state.update_data({f"answer_{current_index}": answer})
     await ask_next_question_or_finish(message, state, volunteer)
 
 
@@ -214,6 +221,25 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext, vol
     await message.answer(select_random_line('STATISTICS_GATHERED'), reply_markup=get_main_menu_keyboard())
     await state.clear()
     await export_stats_to_sheet(volunteer, week_num)
+
+
+def parse_answer(text: str | None) -> str | None:
+    """Normalise an answer, or None if it is not a count.
+
+    Answers are summed as integers when statistics are rendered, so anything
+    else was silently counted as 0 with no indication to the volunteer.
+    Returns a string because that is what the sheet and the JSONB column hold;
+    normalising through int() also turns "007" into "7".
+    """
+    if text is None:
+        return None
+    cleaned = text.strip()
+    if not cleaned or len(cleaned) > config.MAX_ANSWER_LENGTH:
+        return None
+    # isdigit() alone accepts superscripts and other unicode digit forms.
+    if not (cleaned.isascii() and cleaned.isdigit()):
+        return None
+    return str(int(cleaned))
 
 
 def get_next_question_index(user_data: dict) -> int:

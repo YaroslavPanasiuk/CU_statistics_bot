@@ -1,7 +1,8 @@
 from datetime import datetime
-from bot.lexicon import Lexicon, select_random_line
+from bot.lexicon import Lexicon, LexiconError, select_random_line
 from babel.dates import format_date
 from bot.config import config
+import html
 import random
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -82,9 +83,43 @@ def answer_sort_key(key: str) -> tuple[int, int, str]:
     return (1, 0, key)
 
 
-def format_all_stats_for_user(stats_list):
+LABEL_WIDTH = 25
+
+
+def question_label(key: str) -> str:
+    """Display name for an answer_N key, falling back to the key itself.
+
+    `key.split('_')[1]` raised on any key that was not answer_N, and a missing
+    QUESTION_N_NAME raised while rendering a volunteer's own statistics.
+    """
+    parts = key.split("_")
+    if len(parts) > 1 and parts[1].isdigit():
+        try:
+            return select_random_line(f"QUESTION_{parts[1]}_NAME")
+        except LexiconError:
+            pass
+    return key
+
+
+def pad_label(name: str) -> str:
+    """Fixed-width label so the numbers line up in a monospace block."""
+    if len(name) > LABEL_WIDTH:
+        # Truncation and the threshold used to disagree: it cut at 23 while
+        # testing for more than 25.
+        return name[: LABEL_WIDTH - 2] + "…:"
+    return f"{name}: ".ljust(LABEL_WIDTH, ".")
+
+
+def format_all_stats_for_user(stats_list) -> str:
+    """Render a volunteer's semester totals as HTML.
+
+    This used to be sent as MarkdownV2 without escaping anything, so a
+    question name containing '.', '-', '(' or '!' -- ordinary in Ukrainian
+    labels -- made Telegram reject the message with a 400.
+    """
     if not stats_list:
         return "Статистика недоступна."
+
     keys = set()
     for stat in stats_list:
         keys.update(stat.stats.keys())
@@ -94,12 +129,11 @@ def format_all_stats_for_user(stats_list):
         for stat in stats_list:
             try:
                 value = int(stat.stats.get(key, 0))
-            except Exception:
+            except (TypeError, ValueError):
                 value = 0
             totals[key] += value
 
-    text = "📊 Твоя статистика за семестр: \n\n"
+    lines = ["📊 Твоя статистика за семестр:", ""]
     for key, value in totals.items():
-        key_name = select_random_line(f"QUESTION_{key.split('_')[1]}_NAME")
-        text += f"`{(key_name[:23] + '…:') if len(key_name) > 25 else f"{key_name}: ".ljust(25, ".")} {value}`\n"
-    return text
+        lines.append(f"<code>{html.escape(pad_label(question_label(key)))} {value}</code>")
+    return "\n".join(lines)
