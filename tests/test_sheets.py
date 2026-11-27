@@ -178,3 +178,79 @@ class TestVolunteerRowLookup:
         monkeypatch.setattr(spreadsheets, "read_all_values", read_all_values)
         assert await spreadsheets.volunteer_to_row_coord(SimpleNamespace(full_name="Перший")) == 3
         assert len(fetches) == 1
+
+
+class TestAnswersFromRow:
+    def test_maps_cells_to_numbered_answers(self):
+        assert spreadsheets.answers_from_row(["4", "2", "0"]) == {
+            "answer_1": "4", "answer_2": "2", "answer_3": "0",
+        }
+
+    def test_drops_blank_cells(self):
+        """The sheet is authoritative, but a blank cell means "nothing
+        recorded", not "erase the answer the volunteer submitted"."""
+        assert spreadsheets.answers_from_row(["4", "", "0"]) == {"answer_1": "4", "answer_3": "0"}
+
+    def test_drops_whitespace_only_cells(self):
+        assert spreadsheets.answers_from_row(["  ", "1"]) == {"answer_2": "1"}
+
+    def test_an_entirely_blank_week_yields_nothing(self):
+        """The importer skips the week rather than writing empty strings over
+        stored answers on every startup and nightly run."""
+        assert spreadsheets.answers_from_row(["", "", ""]) == {}
+
+    def test_zero_is_a_real_answer(self):
+        assert spreadsheets.answers_from_row(["0"]) == {"answer_1": "0"}
+
+    def test_numbering_is_positional_not_sequential(self):
+        """answer_N must track the column, so a blank third cell does not
+        renumber the fourth answer into its place."""
+        assert spreadsheets.answers_from_row(["a", "b", "", "d"]) == {
+            "answer_1": "a", "answer_2": "b", "answer_4": "d",
+        }
+
+
+class TestFetchUsersWithNoStats:
+    @pytest.fixture(autouse=True)
+    def semester_config(self, monkeypatch):
+        monkeypatch.setattr(spreadsheets.Lexicon, "START_DATE", "01.09.2025", raising=False)
+        monkeypatch.setattr(spreadsheets.Lexicon, "END_DATE", "21.12.2025", raising=False)
+        monkeypatch.setattr(spreadsheets.Lexicon, "QUESTION_PATTERN", "2", raising=False)
+
+    def sheet(self, monkeypatch, rows):
+        monkeypatch.setattr(spreadsheets, "read_range", lambda _range: rows)
+
+    async def test_lists_only_volunteers_with_an_empty_week(self, monkeypatch):
+        self.sheet(monkeypatch, [
+            ["", ""], ["Учні", ""],
+            ["Заповнив Хтось", "4", "2"],
+            ["Не Заповнив", "", ""],
+        ])
+        assert await spreadsheets.fetch_users_with_no_stats(36) == ["Не Заповнив"]
+
+    async def test_a_partially_filled_week_counts_as_filled(self, monkeypatch):
+        self.sheet(monkeypatch, [
+            ["", ""], ["Учні", ""],
+            ["Частково Заповнив", "4", ""],
+        ])
+        assert await spreadsheets.fetch_users_with_no_stats(36) == []
+
+    async def test_blank_name_rows_are_ignored(self, monkeypatch):
+        self.sheet(monkeypatch, [["", ""], ["Учні", ""], ["", "", ""], ["Хтось Інший", "", ""]])
+        assert await spreadsheets.fetch_users_with_no_stats(36) == ["Хтось Інший"]
+
+    async def test_a_week_with_no_questions_reports_nobody(self, monkeypatch):
+        """`record[-0:]` is the whole row, so this used to report that nobody
+        was behind regardless of what the sheet held."""
+        self.sheet(monkeypatch, [["", ""], ["Учні", ""], ["Не Заповнив", "", ""]])
+        assert await spreadsheets.fetch_users_with_no_stats(99) == []
+
+    async def test_raises_instead_of_returning_none(self, monkeypatch):
+        """Returning None made the reminder job die with "NoneType is not
+        iterable" and stop sending reminders without explanation."""
+        def boom(_range):
+            raise RuntimeError("sheets is down")
+
+        monkeypatch.setattr(spreadsheets, "read_range", boom)
+        with pytest.raises(RuntimeError):
+            await spreadsheets.fetch_users_with_no_stats(36)

@@ -140,3 +140,56 @@ class TestSaveUserStats:
 
         rows = await database.get_all_statistics_for_user(volunteer.id, 38, 44)
         assert [r.week for r in rows] == [40]
+
+
+class TestMergeUserStats:
+    async def test_keeps_answers_for_keys_not_supplied(self):
+        """The point of the merging upsert: a blank cell in the sheet must not
+        erase an answer the volunteer submitted through the bot."""
+        volunteer = await make_volunteer()
+        await database.save_user_stats(
+            volunteer.id, week=40, data_dict={"answer_1": "4", "answer_2": "7"}
+        )
+
+        # The sheet only has a value in the first column for this week.
+        await database.merge_user_stats(volunteer.id, week=40, data_dict={"answer_1": "5"})
+
+        rows = await database.get_all_statistics_for_user(volunteer.id)
+        assert rows[0].stats == {"answer_1": "5", "answer_2": "7"}
+
+    async def test_an_empty_merge_changes_nothing(self):
+        volunteer = await make_volunteer()
+        await database.save_user_stats(volunteer.id, week=40, data_dict={"answer_1": "4"})
+        await database.merge_user_stats(volunteer.id, week=40, data_dict={})
+
+        rows = await database.get_all_statistics_for_user(volunteer.id)
+        assert rows[0].stats == {"answer_1": "4"}
+
+    async def test_inserts_when_nothing_is_stored_yet(self):
+        volunteer = await make_volunteer()
+        await database.merge_user_stats(volunteer.id, week=41, data_dict={"answer_1": "2"})
+
+        rows = await database.get_all_statistics_for_user(volunteer.id)
+        assert [r.week for r in rows] == [41]
+        assert rows[0].stats == {"answer_1": "2"}
+
+    async def test_save_user_stats_still_replaces_wholesale(self):
+        """The questionnaire writes every answer for a week, so it must not
+        leave stale keys behind when the question count changes."""
+        volunteer = await make_volunteer()
+        await database.save_user_stats(
+            volunteer.id, week=40, data_dict={"answer_1": "4", "answer_2": "7"}
+        )
+        await database.save_user_stats(volunteer.id, week=40, data_dict={"answer_1": "1"})
+
+        rows = await database.get_all_statistics_for_user(volunteer.id)
+        assert rows[0].stats == {"answer_1": "1"}
+
+    async def test_merge_bumps_last_modified(self):
+        volunteer = await make_volunteer()
+        await database.save_user_stats(volunteer.id, week=40, data_dict={"answer_1": "4"})
+        before = (await database.get_all_statistics_for_user(volunteer.id))[0].last_modified
+
+        await database.merge_user_stats(volunteer.id, week=40, data_dict={"answer_1": "5"})
+        after = (await database.get_all_statistics_for_user(volunteer.id))[0].last_modified
+        assert after >= before

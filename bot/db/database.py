@@ -14,7 +14,6 @@ from sqlalchemy import (
     asc,
     delete,
     func,
-    not_,
     select,
     text,
     update,
@@ -166,6 +165,31 @@ async def save_user_stats(volunteer_id: int, week: int, data_dict: dict):
         await session.commit()
 
 
+async def merge_user_stats(volunteer_id: int, week: int, data_dict: dict):
+    """Upsert, keeping stored answers for any key not supplied.
+
+    The sheet importer uses this instead of save_user_stats: the sheet is
+    authoritative, but a blank cell means "nothing recorded here", not "erase
+    what the volunteer submitted". Rendered as
+    `SET stats = statistics.stats || excluded.stats`.
+    """
+    async with Session() as session:
+        stmt = insert(UserStats).values(
+            volunteer_id=volunteer_id,
+            week=week,
+            stats=data_dict
+        )
+        upsert_stmt = stmt.on_conflict_do_update(
+            constraint='_volunteer_week_uc',
+            set_={
+                "stats": UserStats.__table__.c.stats.op("||")(stmt.excluded.stats),
+                "last_modified": func.now(),
+            },
+        )
+        await session.execute(upsert_stmt)
+        await session.commit()
+
+
 async def sync_volunteers(names_list: list[str]):
     """Insert new roster names and delete volunteers absent from the roster.
 
@@ -273,16 +297,3 @@ async def get_all_registered_ids() -> list[int]:
         stmt = select(User.tg_id).where(User.tg_id.is_not(None))
         result = await session.execute(stmt)
         return list(result.scalars().all())
-
-
-async def get_users_with_no_stats(week: int):
-    async with Session() as session:
-        stmt_filled = select(UserStats.volunteer_id).where(UserStats.week == week)
-        filled_ids = (await session.execute(stmt_filled)).scalars().all()
-
-        stmt = select(User).where(
-            User.tg_id.is_not(None),
-            not_(User.id.in_(filled_ids))
-        )
-        result = await session.execute(stmt)
-        return result.scalars().all()

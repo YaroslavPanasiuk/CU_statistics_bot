@@ -180,10 +180,14 @@ async def import_stats_from_sheet():
         for offset in range(current_week - start_week + 1):
             week = offset + start_week
             first_index, last_index = week_to_indices(week)
-            answers = row[first_index:last_index]
-            stats_dict = {f"answer_{n + 1}": value for n, value in enumerate(answers)}
+            stats_dict = answers_from_row(row[first_index:last_index])
+            if not stats_dict:
+                # Every cell for this week is blank. Writing it would replace a
+                # volunteer's submitted answers with empty strings on every
+                # startup and every nightly run.
+                continue
             try:
-                await database.save_user_stats(
+                await database.merge_user_stats(
                     volunteer_id=volunteer.id,
                     week=week,
                     data_dict=stats_dict
@@ -195,24 +199,43 @@ async def import_stats_from_sheet():
 
 
 
-async def fetch_users_with_no_stats(week):
-    try:
-        end_column = week_to_column_coords(week).split()[1]
-        a1_range = f"B1:{end_column}1000"
-        question_count = questions_in_week(week)
+def answers_from_row(cells: list[str]) -> dict[str, str]:
+    """Map a week's cells to answer_1..answer_N, dropping blanks.
 
-        records = await asyncio.to_thread(read_range, a1_range)
-        records = records[2:]
-        volunteers = [record[0] for record in records]
-        stats = [record[-question_count:] for record in records]
-        result = []
-        for i, volunteer in enumerate(volunteers):
-            if "".join(stats[i]) == "":
-                result.append(volunteer)
-        return result
+    The sheet is authoritative, but a blank cell means "nothing recorded
+    here", not "erase what the volunteer submitted" -- so blanks are left out
+    and merge_user_stats keeps whatever is already stored for those keys.
+    """
+    return {
+        f"answer_{n + 1}": value
+        for n, value in enumerate(cells)
+        if value.strip()
+    }
 
 
+async def fetch_users_with_no_stats(week) -> list[str]:
+    """Names of volunteers whose row is still blank for this week.
 
-    except Exception as e:
-        print(f"Import failed: {e}")
+    Raises on failure. It previously returned None, which made the reminder
+    job fail with `TypeError: 'NoneType' is not iterable` and stop sending
+    reminders without saying why.
+    """
+    question_count = questions_in_week(week)
+    if question_count <= 0:
+        # `record[-0:]` is the entire row, so a week with no questions used to
+        # report that nobody was behind, whatever the sheet said.
+        return []
+
+    end_column = week_to_column_coords(week).split()[1]
+    records = await asyncio.to_thread(read_range, f"B1:{end_column}1000")
+
+    behind = []
+    for record in records[2:]:
+        name = record[0].strip() if record else ""
+        if not name:
+            continue
+        answers = record[-question_count:]
+        if not "".join(answers).strip():
+            behind.append(name)
+    return behind
 

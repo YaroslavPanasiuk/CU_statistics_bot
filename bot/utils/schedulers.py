@@ -64,7 +64,14 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
         print("Current week is out of the allowed range. No reminders will be sent.")
         return
 
-    recipients = await resolve_recipients(level, user_ids)
+    try:
+        recipients = await resolve_recipients(level, user_ids)
+    except Exception as e:
+        # fetch_users_with_no_stats raises on a Sheets failure now; tell the
+        # admin rather than letting the job die silently in the scheduler log.
+        print(f"Reminder level {level} aborted: {e}")
+        await report_to_admin(bot, level, [], [f"could not determine recipients: {e}"])
+        return
 
     reminded: list[str] = []
     failed: list[str] = []

@@ -108,7 +108,44 @@ class TestRouterInclusionOrder:
         assert router_filters(common.registered_router) == [IsRegistered]
         assert router_filters(common.fallback_router) == [IsRegistered]
 
-    def test_unavailable_router_is_still_not_registered(self, dispatcher):
-        """Known gap (Phase 4): BotAvailable has no effect because this router
-        is never included, so the semester-range check is dead code."""
-        assert common.unavailable_router not in dispatcher.sub_routers
+    def test_unavailable_router_is_registered(self, dispatcher):
+        """It used never to be included, which left BotAvailable -- and the
+        whole semester-range check -- as dead code."""
+        assert common.unavailable_router in dispatcher.sub_routers
+
+    def test_admin_router_outranks_the_unavailable_catch_all(self, dispatcher):
+        """Administration has to keep working outside the semester."""
+        included = list(dispatcher.sub_routers)
+        assert included.index(admin.router) < included.index(common.unavailable_router)
+
+    def test_unavailable_router_outranks_the_volunteer_handlers(self, dispatcher):
+        """Otherwise /fill_stats would still start a questionnaire out of
+        season, which is why both fill handlers had to repeat the date check
+        themselves."""
+        included = list(dispatcher.sub_routers)
+        assert included.index(common.unavailable_router) < included.index(common.registered_router)
+        assert included.index(common.unavailable_router) < included.index(common.router)
+
+
+class TestSemesterGuardIsNotDuplicated:
+    def test_fill_handlers_no_longer_check_the_dates_themselves(self):
+        """Both carried the same START_DATE/END_DATE block verbatim; the
+        BotAvailable filter exists for exactly this."""
+        import inspect
+
+        from bot.handlers import common as c
+
+        for fn in (c.cmd_fill_stats, c.start_old_stats):
+            source = inspect.getsource(fn)
+            assert "START_DATE" not in source, fn.__name__
+            assert "END_DATE" not in source, fn.__name__
+
+    def test_the_unavailable_handler_still_distinguishes_the_two_cases(self):
+        import inspect
+
+        from bot.handlers import common as c
+
+        source = inspect.getsource(c.bot_unavailable)
+        assert "SEMESTER_NOT_STARTED" in source
+        assert "SEMESTER_OVER" in source
+        assert "BOT_UNAVAILABLE" in source
