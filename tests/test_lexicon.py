@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from bot.lexicon import Lexicon, LexiconFilter, select_random_line
+from bot.lexicon import Lexicon, LexiconError, LexiconFilter, select_random_line
 
 
 def message(text):
@@ -61,8 +61,8 @@ class TestSelectRandomLine:
         monkeypatch.setattr(Lexicon, "K", "a;;b;;c", raising=False)
         assert {select_random_line("K") for _ in range(100)} <= {"a", "b", "c"}
 
-    def test_missing_key_raises(self):
-        # Known wart (Phase 6): callers get AttributeError rather than a
-        # clear "config sheet is missing key X" error.
-        with pytest.raises(AttributeError):
+    def test_missing_key_names_the_key(self):
+        """Callers used to get a bare AttributeError from deep inside a
+        handler, with no hint that the config sheet was the problem."""
+        with pytest.raises(LexiconError, match="DEFINITELY_NOT_A_KEY"):
             select_random_line("DEFINITELY_NOT_A_KEY")

@@ -15,6 +15,7 @@ from datetime import datetime
 import pytest
 
 from bot.utils.maths import (
+    WeekOutOfRange,
     check_week_in_range,
     number_to_excel_column,
     questions_in_week,
@@ -85,13 +86,18 @@ class TestWeekToIndices:
         for week in range(semester["start_week"], semester["end_week"]):
             assert week_to_indices(week)[1] == week_to_indices(week + 1)[0], f"week {week}"
 
-    def test_out_of_range_returns_none(self, semester):
-        # Known wart (scheduled for Phase 6): callers such as
-        # `week_to_column_coords` subscript this result immediately, so an
-        # out-of-range week raises TypeError instead of a clear domain error.
-        assert week_to_indices(35) is None
-        with pytest.raises(TypeError):
-            week_to_column_coords(35)
+    def test_out_of_range_raises_a_domain_error(self, semester):
+        """It used to return None, and every caller subscripted the result
+        immediately, so the real problem surfaced as "NoneType is not
+        subscriptable"."""
+        with pytest.raises(WeekOutOfRange, match="outside the semester"):
+            week_to_indices(35)
+        with pytest.raises(WeekOutOfRange):
+            week_to_column_coords(52)
+
+    def test_the_error_names_the_configured_semester(self, semester):
+        with pytest.raises(WeekOutOfRange, match=r"01\.09\.2025 to 21\.12\.2025"):
+            week_to_indices(35)
 
 
 class TestWeekToColumnCoords:

@@ -6,7 +6,8 @@ from aiogram.exceptions import TelegramForbiddenError, TelegramRetryAfter
 
 from bot.config import config
 from bot.db import database
-from bot.lexicon import select_random_line
+from bot.lexicon import fill
+from bot.utils.formatters import display_name
 from bot.utils.keyboards import get_main_menu_keyboard
 from bot.utils.maths import check_week_in_range
 from bot.utils.spreadsheets import fetch_users_with_no_stats
@@ -53,7 +54,7 @@ async def resolve_recipients(level: int, user_ids=None) -> list[database.User]:
 async def send_reminder_to(bot: Bot, user: database.User, level: int) -> None:
     await bot.send_message(
         user.tg_id,
-        select_random_line(f"REMINDER{level}").format(user.full_name.split()[-1]),
+        fill(f"REMINDER{level}", display_name(user.full_name)),
         reply_markup=get_main_menu_keyboard(),
         parse_mode="HTML",
     )
@@ -115,10 +116,11 @@ def format_admin_summary(level: int, reminded: list[str], failed: list[str]) -> 
 
 
 async def report_to_admin(bot: Bot, level: int, reminded: list[str], failed: list[str]) -> None:
-    admin_ids = [part.strip() for part in config.ADMIN_IDS.split(",") if part.strip()]
-    if not admin_ids:
+    if not config.ADMIN_IDS:
         return
     try:
-        await bot.send_message(admin_ids[0], format_admin_summary(level, reminded, failed))
+        await bot.send_message(
+            config.ADMIN_IDS[0], format_admin_summary(level, reminded, failed)
+        )
     except Exception as e:
         print(f"Failed to send the reminder summary to the admin: {e}")

@@ -3,7 +3,7 @@ from aiogram.filters import CommandStart, Command, or_f
 from aiogram.fsm.context import FSMContext
 from bot.db import database
 from aiogram.fsm.state import StatesGroup, State
-from bot.lexicon import select_random_line, LexiconFilter
+from bot.lexicon import select_random_line, fill, LexiconFilter
 from datetime import datetime, timedelta
 from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user, display_name
@@ -13,7 +13,7 @@ from bot.filters.is_registered import IsNotRegistered, IsRegistered
 from bot.filters.bot_available import BotAvailable
 from aiogram import F
 from bot.lexicon import Lexicon
-from bot.config import Config
+from bot.config import config
 
 class Registration(StatesGroup):
     waiting_for_name = State()
@@ -98,7 +98,7 @@ async def process_registration_name(message: types.Message, state: FSMContext):
 
     await state.clear()
     await message.answer(
-        select_random_line('REGISTRATION_COMPLETE').format(display_name(volunteer.full_name)),
+        fill('REGISTRATION_COMPLETE', display_name(volunteer.full_name)),
         reply_markup=get_main_menu_keyboard(),
     )
 
@@ -123,7 +123,7 @@ async def initiate_stats_questions(message: types.Message, state: FSMContext, we
 
 @registered_router.message(or_f(Command("fill_stats"),LexiconFilter("FILL_STATISTICS")))
 async def cmd_fill_stats(message: types.Message, state: FSMContext):
-    current_week = (datetime.now() - timedelta(days=Config.LAG_TRESHOLD_DAYS)).isocalendar()[1]
+    current_week = (datetime.now() - timedelta(days=config.LAG_THRESHOLD_DAYS)).isocalendar()[1]
     await initiate_stats_questions(message, state, current_week)
 
 @registered_router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))

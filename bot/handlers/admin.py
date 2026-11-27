@@ -6,7 +6,7 @@ from bot.utils.schedulers import send_weekly_reminder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.filters import Command, CommandObject
 from bot.db import database
-from bot.lexicon import Lexicon
+from bot.lexicon import Lexicon, validate_config
 from bot.utils.spreadsheets import import_stats_from_sheet, reset_sheet_cache
 
 router = Router()
@@ -134,6 +134,7 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
     try:
         await asyncio.to_thread(Lexicon.load_from_sheet)
+        validate_config()
         # WORKSHEET_NAME may now point at a different tab.
         reset_sheet_cache()
         await message.answer("Successfully reloaded config from sheet")

@@ -2,7 +2,7 @@
 import asyncio
 from aiogram import Bot, Dispatcher
 from bot.config import config
-from bot.lexicon import Lexicon
+from bot.lexicon import Lexicon, validate_config
 from bot.handlers import register_handlers
 from bot.db import database
 from aiogram.fsm.storage.memory import MemoryStorage
@@ -13,6 +13,8 @@ from bot.utils.schedulers import send_weekly_reminder
 async def main():
     print('Loading lexicon...')
     Lexicon.load_from_sheet()
+    # Fail here, with a specific message, rather than in a handler hours later.
+    validate_config()
     print('Initializing database...')
     await database.init_db()
 

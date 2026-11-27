@@ -38,7 +38,7 @@ def quick(monkeypatch):
     monkeypatch.setattr(Lexicon, "START_DATE", "01.01.2026", raising=False)
     monkeypatch.setattr(Lexicon, "END_DATE", "31.12.2026", raising=False)
     monkeypatch.setattr(Lexicon, "QUESTION_PATTERN", "4", raising=False)
-    monkeypatch.setattr(schedulers.config, "ADMIN_IDS", "4242", raising=False)
+    monkeypatch.setattr(schedulers.config, "ADMIN_IDS", (4242,), raising=False)
 
 
 async def _noop():
@@ -97,8 +97,8 @@ class TestSendWeeklyReminder:
         bot = FakeBot()
         await schedulers.send_weekly_reminder(bot, 1)
 
-        recipients = [chat for chat, _ in bot.sent if chat != "4242"]
-        summaries = [text for chat, text in bot.sent if chat == "4242"]
+        recipients = [chat for chat, _ in bot.sent if chat != 4242]
+        summaries = [text for chat, text in bot.sent if chat == 4242]
         assert recipients == [111, 222]
         assert len(summaries) == 1
 
@@ -112,7 +112,7 @@ class TestSendWeeklyReminder:
         bot = FakeBot(fail={111: TelegramForbiddenError(method=None, message="blocked")})
         await schedulers.send_weekly_reminder(bot, 1)
 
-        summary = next(text for chat, text in bot.sent if chat == "4242")
+        summary = next(text for chat, text in bot.sent if chat == 4242)
         assert "1 sent, 1 failed" in summary
         assert "blocked the bot" in summary
 
