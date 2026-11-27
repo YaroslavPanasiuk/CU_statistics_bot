@@ -177,9 +177,34 @@ sudo chgrp users .env && sudo chmod 640 .env   # currently 2775: world-readable
 sudo cp deploy/CU_statistics_bot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# 7. Start and watch.
+# 7. Start.
 sudo systemctl start CU_statistics_bot
-journalctl -u CU_statistics_bot -f
+
+# 8. VERIFY IT IS ACTUALLY RUNNING. Do not skip this: `systemctl is-active`
+#    reports "active" during an auto-restart cycle, so a service crash-looping
+#    every RestartSec=5 looks healthy. Check that the restart counter is frozen
+#    and that a process actually exists.
+systemctl show CU_statistics_bot -p NRestarts -p MainPID --no-pager; sleep 25
+systemctl show CU_statistics_bot -p NRestarts -p MainPID --no-pager
+#    Same NRestarts twice and a non-zero MainPID = healthy.
+#    Climbing NRestarts with MainPID=0 = crash loop; see below.
+
+#    Startup completed only if sync_volunteers ran, which is after
+#    validate_config and the schema upgrade. 29 volunteers (not 30) confirms it.
+psql "$(deploy/dsn.sh)" -c "SELECT count(*) AS volunteers, count(tg_id) AS registered FROM volunteers;"
+
+#    journalctl needs group adm or systemd-journal; `sudo journalctl -u
+#    CU_statistics_bot -n 50` works regardless. Without it, reproduce the
+#    startup in the foreground, which prints the real traceback:
+#      timeout 20 venv/bin/python -m bot.main
+```
+
+If it crash-loops, run the config check first -- a missing config-sheet key
+makes the bot exit during startup, and `Restart=always` turns that into a
+silent five-second loop:
+
+```bash
+venv/bin/python deploy/check_config.py
 ```
 
 Expect in the log: lexicon loaded, schema upgraded, then
