@@ -52,7 +52,12 @@ reading several files to work out.
    are overridable but **must not** be required — adding one of those keys to
    `REQUIRED_KEYS` would break existing deployments on restart.
 2. **Data spreadsheet** (`GOOGLE_SHEET_URL`) — the roster (non-empty column B
-   from row 3) plus the per-week answer grid. Imported at startup and nightly,
+   from row 3) plus the per-week answer grid. Only the single tab named by
+   `Lexicon.WORKSHEET_NAME` is ever touched. The other tabs in that
+   spreadsheet (`Step-Ups осінь 2026`, `ТВК`) are **maintained by hand and
+   must stay unconnected to the bot** — do not add code that reads or writes
+   them. Config comes from tab index 0 of the *config* spreadsheet, a
+   different document. Imported at startup and nightly,
    written back per submission. The sheet is authoritative, **but blank cells
    are skipped**: imports go through `database.merge_user_stats`
    (`SET stats = statistics.stats || excluded.stats`) so a blank or
