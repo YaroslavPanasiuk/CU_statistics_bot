@@ -8,6 +8,11 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 from bot.config import config as bot_config
 from bot.db.database import Base
 
+# Imported for its side effect: the configuration tables register themselves on
+# Base.metadata. Without this, `alembic check` reports them as removed and
+# `revision --autogenerate` would propose dropping them.
+from bot.db import configstore  # noqa: F401
+
 config = context.config
 
 # ConfigParser treats '%' as interpolation, and a DSN may legitimately contain
