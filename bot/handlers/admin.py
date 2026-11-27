@@ -11,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from bot.db import database
+from bot import lexicon
 from bot.lexicon import Lexicon, validate_config
 from bot.utils.spreadsheets import import_stats_from_sheet, reset_sheet_cache
 
@@ -200,14 +201,20 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
 
 @router.message(Command("reload_config"))
 async def cmd_reload_config(message: types.Message, command: CommandObject):
+    """Reload now instead of waiting for the poll.
+
+    Reads whichever source is in charge, so this keeps working either side of
+    the cutover. A reload that fails leaves the running configuration alone.
+    """
     try:
-        await asyncio.to_thread(Lexicon.load_from_sheet)
-        validate_config()
+        if not await lexicon.load_from_store():
+            await asyncio.to_thread(Lexicon.load_from_sheet)
+            validate_config()
         # WORKSHEET_NAME may now point at a different tab.
         reset_sheet_cache()
-        await message.answer("Successfully reloaded config from sheet")
+        await message.answer(f"Successfully reloaded config from the {lexicon.source()}")
     except Exception as e:
-        await message.answer(f"Failed to reload config from sheet: {e}")
+        await message.answer(f"Failed to reload config: {e}")
 
 @router.message(Command("reload_data"))
 async def cmd_reload_data(message: types.Message, command: CommandObject):

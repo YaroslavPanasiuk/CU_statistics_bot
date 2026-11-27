@@ -39,18 +39,42 @@ reading several files to work out.
 
 **Three sources of truth, kept in sync:**
 
-1. **Config spreadsheet** (`GOOGLE_SHEET_CONFIG_URL`) — a key/value sheet loaded
-   into the `Lexicon` class by `Lexicon.load_from_sheet()`. Keys are slugified
-   (`\W+` → `_`, uppercased) and set as **class attributes at runtime**, so
-   `Lexicon.START_DATE`, `END_DATE`, `QUESTION_PATTERN`, `WORKSHEET_NAME`,
-   `QUESTION_N`, `QUESTION_N_NAME`, `REMINDER{1,2,3}` do not exist in source —
-   grep for the string key, not the attribute. Values may hold `;;`-separated
-   variants; `select_random_line(key)` picks one, and `LexiconFilter` matches
-   any of them. `validate_config()` (bot/lexicon.py) refuses to start on a
-   config that would fail confusingly later; `REQUIRED_KEYS` lists what is
-   mandatory. `text(key, default)` / `fill_default(...)` are for strings that
-   are overridable but **must not** be required — adding one of those keys to
-   `REQUIRED_KEYS` would break existing deployments on restart.
+1. **The configuration** — every string, date and schedule the bot shows or
+   parses. It lives in Postgres (`settings` / `setting_variants`, edited
+   through the web UI) and falls back to the **config spreadsheet**
+   (`GOOGLE_SHEET_CONFIG_URL`, a key/value sheet, tab index 0) when the
+   database holds nothing. `bot/main.py` tries `lexicon.load_from_store()`
+   first and only calls `Lexicon.load_from_sheet()` if it returns False, so
+   emptying those tables rolls the deployment back to the sheet.
+
+   Keys are **not class attributes in source**: the sheet loader slugifies
+   (`\W+` → `_`, uppercased) and setattrs them, and a `_LexiconMeta.__getattr__`
+   serves database-loaded ones. `Lexicon.START_DATE`, `END_DATE`,
+   `QUESTION_PATTERN`, `WORKSHEET_NAME`, `QUESTION_N`, `QUESTION_N_NAME`,
+   `REMINDER{1,2,3}` exist only at runtime — grep for the string key. Every key
+   is described once in **`bot/registry.py`**, and `tests/test_registry.py`
+   fails if the code reads a key the registry does not describe.
+
+   A key has one or more interchangeable variants (`;;`-separated in the sheet,
+   ordered rows in the database). `lexicon.variants(key)` is the one place that
+   knows the difference; `select_random_line(key)` picks one and `LexiconFilter`
+   matches any of them. Keys that are *parsed* rather than shown (`Kind.DATE`,
+   `PATTERN`, `WORKSHEET`) must have exactly one variant, and validation
+   rejects more.
+
+   `validate_config()` checks the live configuration; `validate_mapping()`
+   checks a **candidate before it goes live**, which is what makes a web UI
+   edit fail-safe — a rejected version is logged once and the working
+   configuration keeps serving. `REQUIRED_KEYS` comes from the registry.
+   `text(key, default)` / `fill_default(...)` are for strings that are
+   overridable but **must not** be required: adding one of those to
+   `REQUIRED_KEYS` once caused a 12-hour restart loop.
+
+   `lexicon.poll_for_changes()` runs as a task from `main()` and reloads when
+   `config_meta.config_version` moves, so an edit reaches a running bot within
+   `POLL_SECONDS` (30) without a restart. `/reload_config` does it immediately.
+   `deploy/check_config.py` reports every gap at once, reading whichever source
+   the bot would read, and exits non-zero.
 2. **Data spreadsheet** (`GOOGLE_SHEET_URL`) — the roster (non-empty column B
    from row 3) plus the per-week answer grid. Only the single tab named by
    `Lexicon.WORKSHEET_NAME` is ever touched. The other tabs in that

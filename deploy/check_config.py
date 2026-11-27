@@ -1,4 +1,4 @@
-"""Report config-sheet gaps without starting the bot.
+"""Report configuration gaps without starting the bot.
 
 Run this before a restart that includes a change to REQUIRED_KEYS. validate_config
 raises on the first problem it finds, which makes a multi-key gap look like a
@@ -8,8 +8,11 @@ wrong.
     cd ~/Projects/CU_statistics_bot
     PYTHONPATH=$PWD venv/bin/python deploy/check_config.py
 
-Read-only: it loads the config spreadsheet and touches nothing else.
+It reads whichever source the bot would read -- the database if the
+configuration has been imported into it, the spreadsheet otherwise -- so a
+pass here means the same thing a startup would. Read-only either way.
 """
+import asyncio
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,7 +26,8 @@ for candidate in (Path(__file__).resolve().parents[1], Path.cwd()):
 else:
     sys.exit("check_config.py: run this from the project root")
 
-from bot.lexicon import REQUIRED_KEYS, Lexicon  # noqa: E402
+from bot import lexicon  # noqa: E402
+from bot.lexicon import REQUIRED_KEYS, Lexicon, LexiconError  # noqa: E402
 
 OPTIONAL_KEYS = (
     "NAME_NOT_RECOGNISED", "GREETING", "NOTHING_TO_CANCEL", "CANCELLED",
@@ -33,8 +37,46 @@ OPTIONAL_KEYS = (
 )
 
 
+async def load() -> str:
+    """Mirror bot/main.py exactly. A check that reads a different source from
+    the bot is worse than no check: it reports on a configuration nobody runs.
+
+    A database that cannot be reached is reported, not fatal: the bot would
+    fall through to the spreadsheet too, and this script's job is to say what
+    would happen, not to decide it.
+    """
+    from bot.db import database
+
+    note = ""
+    try:
+        try:
+            if not await lexicon.load_from_store():
+                Lexicon.load_from_sheet()
+        except LexiconError:
+            # The database holds a configuration the bot would refuse. Say so;
+            # falling back to the sheet here would report a passing check for a
+            # configuration nobody is going to run.
+            raise
+        except Exception as e:
+            note = f"could not read the configuration database ({e}); read the spreadsheet instead"
+            Lexicon.load_from_sheet()
+    finally:
+        await database.dispose_db()
+    return note
+
+
 def main() -> int:
-    Lexicon.load_from_sheet()
+    try:
+        note = asyncio.run(load())
+    except Exception as e:
+        # A configuration the bot would refuse to start on. Report it as a
+        # problem rather than a traceback -- that is what this script is for.
+        print(f"FAIL: loading the configuration failed: {e}")
+        return 1
+
+    if note:
+        print(f"warning: {note}")
+    print(f"source: the {lexicon.source()}")
     problems: list[str] = []
 
     missing = [k for k in REQUIRED_KEYS if getattr(Lexicon, k, None) in (None, "")]
@@ -74,7 +116,7 @@ def main() -> int:
 
     print("\noptional keys (absent is fine, the code falls back):")
     for key in OPTIONAL_KEYS:
-        state = "sheet" if getattr(Lexicon, key, None) else "fallback"
+        state = "configured" if lexicon.variants(key) else "fallback"
         print(f"  {key:<26} {state}")
 
     if problems:

@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from bot.config import config
 from bot.logging_setup import configure_logging
+from bot import lexicon
 from bot.lexicon import Lexicon, validate_config
 from bot.handlers import register_handlers
 from bot.db import database
@@ -16,12 +17,20 @@ logger = logging.getLogger(__name__)
 
 async def main():
     configure_logging()
-    logger.info('Loading lexicon...')
-    Lexicon.load_from_sheet()
-    # Fail here, with a specific message, rather than in a handler hours later.
-    validate_config()
     logger.info('Initializing database...')
     await database.init_db()
+
+    # The database is the configuration's home; the spreadsheet is the fallback
+    # for a deployment that has not imported it yet, and the way back if the
+    # import turns out wrong. load_from_store() validates before it commits, so
+    # a configuration that would not run leaves nothing half-loaded.
+    logger.info('Loading lexicon...')
+    if not await lexicon.load_from_store():
+        logger.info('no configuration in the database, reading the spreadsheet')
+        await asyncio.to_thread(Lexicon.load_from_sheet)
+    # Fail here, with a specific message, rather than in a handler hours later.
+    validate_config()
+    logger.info(f'configuration loaded from the {lexicon.source()}')
 
     logger.info('Synchronizing volunteers...')
     try:
@@ -70,6 +79,10 @@ async def main():
 
     scheduler.start()
 
+    # Picks up web UI edits without a restart. Not an APScheduler job: those
+    # are cron-shaped, and a 30-second poll with coalescing is simpler as a task.
+    config_watcher = asyncio.create_task(lexicon.poll_for_changes())
+
     logger.info('bot started')
     try:
         await dp.start_polling(bot)
@@ -78,6 +91,7 @@ async def main():
         # releases the long poll instead of holding it for several seconds,
         # and so Postgres connections are returned rather than dropped.
         logger.info('shutting down...')
+        config_watcher.cancel()
         scheduler.shutdown(wait=False)
         await bot.session.close()
         await database.dispose_db()
