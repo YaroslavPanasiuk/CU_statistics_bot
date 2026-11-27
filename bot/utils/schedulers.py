@@ -15,7 +15,7 @@ async def send_weekly_reminder(bot: Bot, level: int, user_ids=None):
         return
     if user_ids is None:
         current_week = datetime.now().isocalendar()[1]
-        user_names = fetch_users_with_no_stats(current_week)
+        user_names = await fetch_users_with_no_stats(current_week)
         users = [await database.get_user_by_full_name(user_name) for user_name in user_names]
         user_ids = [user.tg_id for user in users]
     for tg_id in user_ids:

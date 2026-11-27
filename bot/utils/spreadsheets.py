@@ -1,21 +1,96 @@
-from bot.lexicon import Lexicon
-import gspread
-from bot.config import config
+import asyncio
+import time
 from datetime import datetime
-from bot.db import database
-from bot.utils.maths import week_to_column_coords, week_to_indices, questions_in_week
 
-def load_volunteer_list() -> list[str]:
+import gspread
+from gspread.exceptions import APIError
+
+from bot.config import config
+from bot.db import database
+from bot.lexicon import Lexicon
+from bot.utils.maths import questions_in_week, week_to_column_coords, week_to_indices
+
+# Every operation used to build a fresh service-account client and re-open the
+# spreadsheet by URL -- three extra round trips per call, against a quota of
+# 60 requests per minute per user. These handles are cached instead.
+_client: gspread.Client | None = None
+_worksheet_cache: dict[tuple[str, str], gspread.Worksheet] = {}
+
+# Roster from the last load_volunteer_list(), so looking up one volunteer's row
+# does not re-download the whole sheet.
+_roster: list[str] | None = None
+
+RETRYABLE_STATUSES = frozenset({429, 500, 502, 503, 504})
+
+
+def reset_sheet_cache() -> None:
+    """Drop cached handles. Call after the config sheet is reloaded, since
+    WORKSHEET_NAME may now point somewhere else."""
+    global _client, _roster
+    _client = None
+    _roster = None
+    _worksheet_cache.clear()
+
+
+def data_worksheet() -> gspread.Worksheet:
+    global _client
+    key = (config.GOOGLE_SHEET_URL, Lexicon.WORKSHEET_NAME)
+    if key not in _worksheet_cache:
+        if _client is None:
+            _client = gspread.service_account_from_dict(config.GOOGLE_CREDS)
+        spreadsheet = _client.open_by_url(config.GOOGLE_SHEET_URL)
+        _worksheet_cache[key] = spreadsheet.worksheet(Lexicon.WORKSHEET_NAME)
+    return _worksheet_cache[key]
+
+
+def with_retry(fn, *args, attempts: int = 4, **kwargs):
+    """Run a Sheets call, backing off through rate limits and 5xx.
+
+    Synchronous on purpose: callers run it inside asyncio.to_thread, so the
+    sleep never blocks the event loop.
+    """
+    delay = 1.0
+    for attempt in range(1, attempts + 1):
+        try:
+            return fn(*args, **kwargs)
+        except APIError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status not in RETRYABLE_STATUSES or attempt == attempts:
+                raise
+            print(f"Sheets API {status}; retrying in {delay:.0f}s (attempt {attempt}/{attempts})")
+            time.sleep(delay)
+            delay *= 2
+
+
+# These resolve the worksheet *inside* the function body, so a cache miss
+# (which opens the spreadsheet by URL) happens on the worker thread rather
+# than on the event loop.
+def read_all_values() -> list[list[str]]:
+    return with_retry(data_worksheet().get_all_values)
+
+
+def read_range(a1_range: str) -> list[list[str]]:
+    return with_retry(data_worksheet().get_values, range_name=a1_range)
+
+
+def write_values(a1_range: str, values: list[list[str]]) -> None:
+    with_retry(
+        data_worksheet().batch_update,
+        [{"range": a1_range, "values": values}],
+        value_input_option="USER_ENTERED",
+    )
+
+async def load_volunteer_list() -> list[str]:
     """Return the volunteer roster from column B of the data sheet.
 
     Raises on failure. `sync_volunteers` deletes volunteers that are absent
     from this list, so a Sheets outage must never be mistaken for an empty
     roster.
     """
-    gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-    sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-    worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
-    return volunteer_names(worksheet.get_all_values())
+    global _roster
+    values = await asyncio.to_thread(read_all_values)
+    _roster = volunteer_names(values)
+    return _roster
 
 
 def volunteer_names(values: list[list[str]]) -> list[str]:
@@ -36,42 +111,45 @@ def volunteer_names(values: list[list[str]]) -> list[str]:
             names.append(name)
     return names
 
-async def volunteer_to_row_coord(volunteer):
-    volunteers = load_volunteer_list()
-    for i, v in enumerate(volunteers):
-         if volunteer.full_name == v:
-              return i + 3
+async def volunteer_to_row_coord(volunteer) -> int:
+    """1-based sheet row for a volunteer, or -1 if absent.
+
+    Reads the roster cached by the last load_volunteer_list() instead of
+    re-downloading the entire sheet on every export.
+    """
+    roster = _roster if _roster is not None else await load_volunteer_list()
+    for i, name in enumerate(roster):
+        if volunteer.full_name == name:
+            return i + 3
     return -1
 
 
 async def export_stats_to_sheet(volunteer, week):
     try:
         stats = await database.get_user_statistics(volunteer_id=volunteer.id, week=week)
-        gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-        sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-        worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
+        if not stats:
+            print(f"Export skipped: no stored statistics for {volunteer.full_name} week {week}")
+            return
 
         row = await volunteer_to_row_coord(volunteer)
-        columns = week_to_column_coords(week)
-        range = f"{columns.split()[0]}{row}:{columns.split()[1]}{row}"
+        if row < 0:
+            # Previously this formatted an invalid A1 range like "C-1:F-1" and
+            # relied on the except below to swallow the resulting error.
+            print(f"Export skipped: {volunteer.full_name} is not in the sheet roster")
+            return
 
-        worksheet.batch_update([{
-            'range': range,
-            'values': [list(stats[0].stats.values())]
-        }]
-        , value_input_option='USER_ENTERED')
+        first_column, last_column = week_to_column_coords(week).split()
+        a1_range = f"{first_column}{row}:{last_column}{row}"
+        values = [list(stats[0].stats.values())]
 
-
+        await asyncio.to_thread(write_values, a1_range, values)
     except Exception as e:
         print(f"Export failed: {e}")
 
 
 async def import_stats_from_sheet():
     try:
-        gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-        sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-        worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
-        values = worksheet.get_all_values()
+        values = await asyncio.to_thread(read_all_values)
     except Exception as e:
         # The import loop below used to sit outside this try, so a Sheets
         # failure printed here and then raised NameError on `values`.
@@ -117,18 +195,13 @@ async def import_stats_from_sheet():
 
 
 
-def fetch_users_with_no_stats(week):
+async def fetch_users_with_no_stats(week):
     try:
-        gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-        sh = gc.open_by_url(config.GOOGLE_SHEET_URL)
-        worksheet = sh.worksheet(Lexicon.WORKSHEET_NAME)
-
         end_column = week_to_column_coords(week).split()[1]
-        start_column = "B"
-        range = f"{start_column}1:{end_column}1000"
+        a1_range = f"B1:{end_column}1000"
         question_count = questions_in_week(week)
 
-        records = worksheet.get_values(range_name=range)
+        records = await asyncio.to_thread(read_range, a1_range)
         records = records[2:]
         volunteers = [record[0] for record in records]
         stats = [record[-question_count:] for record in records]

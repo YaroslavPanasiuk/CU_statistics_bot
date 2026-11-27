@@ -3,7 +3,12 @@ import pytest
 
 from bot.db.database import WeekStats
 from bot.lexicon import Lexicon
-from bot.utils.formatters import answer_sort_key, format_all_stats_for_user
+from bot.utils.formatters import (
+    answer_sort_key,
+    format_all_stats_for_user,
+    load_bible_verses,
+    random_bible_verse,
+)
 
 
 @pytest.fixture
@@ -25,6 +30,43 @@ class TestAnswerSortKey:
     def test_unrecognised_keys_sort_last_and_deterministically(self):
         keys = ["zzz", "answer_2", "selected_week", "answer_1"]
         assert sorted(keys, key=answer_sort_key) == ["answer_1", "answer_2", "selected_week", "zzz"]
+
+
+class TestBibleVerses:
+    def test_verses_load_independently_of_the_working_directory(self, tmp_path, monkeypatch):
+        """The path used to be the CWD-relative literal "bot/res/Bible.xml",
+        so the bot only worked when launched from the repo root."""
+        monkeypatch.chdir(tmp_path)
+        assert len(load_bible_verses()) > 1000
+
+    def test_no_verse_renders_as_none(self):
+        """A handful of verses have no text; they used to be emitted as the
+        literal string "None"."""
+        verses = load_bible_verses()
+        assert not [v for v in verses if "None" in v]
+
+    def test_each_verse_carries_text_and_a_reference(self):
+        for verse in load_bible_verses()[:50]:
+            text, reference = verse.split("\n")
+            assert text.startswith("📖 ") and len(text) > 3
+            assert reference.startswith("📍 ") and ":" in reference
+
+    def test_random_verse_is_one_of_the_loaded_verses(self):
+        verses = set(load_bible_verses())
+        for _ in range(20):
+            assert random_bible_verse() in verses
+
+    def test_repeated_calls_do_not_reparse(self):
+        """Regression: this ran on every text message, parsing 6.9 MB of XML
+        and building a 31k-entry list synchronously on the event loop."""
+        import time
+
+        random_bible_verse()  # warm the cache
+        start = time.perf_counter()
+        for _ in range(500):
+            random_bible_verse()
+        per_call = (time.perf_counter() - start) / 500
+        assert per_call < 1e-4, f"{per_call * 1e6:.0f} us per call suggests a re-parse"
 
 
 class TestFormatAllStatsForUser:

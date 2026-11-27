@@ -18,7 +18,7 @@ async def main():
 
     print('Synchronizing volunteers...')
     try:
-        await database.sync_volunteers(load_volunteer_list())
+        await database.sync_volunteers(await load_volunteer_list())
     except Exception as e:
         # A Sheets outage must not take the bot offline. load_volunteer_list
         # raises rather than returning an empty roster -- which sync_volunteers

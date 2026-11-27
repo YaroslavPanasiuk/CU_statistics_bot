@@ -7,7 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from aiogram.filters import Command, CommandObject
 from bot.db import database
 from bot.lexicon import Lexicon
-from bot.utils.spreadsheets import import_stats_from_sheet
+from bot.utils.spreadsheets import import_stats_from_sheet, reset_sheet_cache
 
 router = Router()
 router.message.filter(IsAdmin())
@@ -133,7 +133,9 @@ async def cmd_register_user(message: types.Message, command: CommandObject):
 @router.message(Command("reload_config"), IsAdmin())
 async def cmd_list_jobs(message: types.Message, command: CommandObject):
     try:
-        Lexicon.load_from_sheet()
+        await asyncio.to_thread(Lexicon.load_from_sheet)
+        # WORKSHEET_NAME may now point at a different tab.
+        reset_sheet_cache()
         await message.answer("Successfully reloaded config from sheet")
     except Exception as e:
         await message.answer(f"Failed to reload config from sheet: {e}")

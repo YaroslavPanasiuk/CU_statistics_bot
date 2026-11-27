@@ -2,8 +2,9 @@ from datetime import datetime
 from bot.lexicon import Lexicon, select_random_line
 from babel.dates import format_date
 from bot.config import config
-import xml.etree.ElementTree as ET
 import random
+import xml.etree.ElementTree as ET
+from pathlib import Path
 from bot.res.Bible_books_dict import BIBLE_BOOKS_UA
 
 def week_num_to_dates(week:int):
@@ -17,41 +18,44 @@ def week_num_to_dates(week:int):
     sunday_str = format_date(sunday, format="d MMMM", locale=config.LOCALE)
     return f'{monday_str} - {sunday_str}'
 
-def random_bible_verse():
-    tree = ET.parse("bot/res/Bible.xml")
-    root = tree.getroot()
+BIBLE_PATH = Path(__file__).resolve().parent.parent / "res" / "Bible.xml"
 
-    all_data = []
+_verses: list[str] | None = None
 
-    for testament in root.findall('testament'):
-        t_name = testament.get('name')
 
-        for book in testament.findall('book'):
-            b_num = book.get('number')
-            b_name = BIBLE_BOOKS_UA.get(b_num, f"Книга {b_num}")
+def load_bible_verses(path: Path | None = None) -> list[str]:
+    """Pre-render every verse as the string the bot sends.
 
-            for chapter in book.findall('chapter'):
-                c_num = chapter.get('number')
+    Called once and cached. This used to run on *every* text message: the
+    fallback handler re-parsed a 6.9 MB XML file and rebuilt a 31k-entry list
+    of dicts each time, synchronously, on the event loop. Storing the finished
+    strings keeps the resident cost to a few MB instead of holding the parsed
+    tree or a dict per verse.
+    """
+    tree = ET.parse(path or BIBLE_PATH)
+    verses: list[str] = []
 
-                for verse in chapter.findall('verse'):
-                    v_num = verse.get('number')
-                    v_text = verse.text
+    for book in tree.getroot().iter("book"):
+        book_name = BIBLE_BOOKS_UA.get(book.get("number"), f"Книга {book.get('number')}")
+        for chapter in book.iter("chapter"):
+            chapter_number = chapter.get("number")
+            for verse in chapter.iter("verse"):
+                text = (verse.text or "").strip()
+                if not text:
+                    # A handful of verses are empty; rendering them produced
+                    # a message reading "None".
+                    continue
+                verses.append(f"📖 {text}\n📍 {book_name} {chapter_number}:{verse.get('number')}")
 
-                    all_data.append({
-                        "testament": t_name,
-                        "book": b_name,
-                        "chapter": c_num,
-                        "verse": v_num,
-                        "text": v_text
-                    })
+    return verses
 
-    # Pick a random entry
-    selection = random.choice(all_data)
 
-    return (
-        f"📖 {selection['text']}\n"
-        f"📍 {selection['book']} {selection['chapter']}:{selection['verse']}"
-    )
+def random_bible_verse() -> str:
+    global _verses
+    if _verses is None:
+        _verses = load_bible_verses()
+    return random.choice(_verses)
+
 
 def answer_sort_key(key: str) -> tuple[int, int, str]:
     """Order 'answer_N' keys numerically; keep anything unrecognised last.
