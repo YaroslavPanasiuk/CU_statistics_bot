@@ -145,7 +145,7 @@ git diff --numstat -- . ':(exclude)*.pyc'      # expect 0 insertions, 0 deletion
 #    NOT writable -- only ~/Projects below it is. Avoid /tmp, which is a tmpfs
 #    and would lose the backup on a reboot.
 pg_dump --no-owner --no-acl "$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#^postgresql\+asyncpg#postgresql#')" > ~/Projects/custat_pre_migration_$(date +%F).sql
-ls -l ~/Projects/custat_pre_migration_*.sql   # expect roughly 80 KB             # sanity: not empty
+ls -l ~/Projects/custat_pre_migration_*.sql    # sanity: roughly 80 KB, not empty
 cp /etc/systemd/system/CU_statistics_bot.service ~/Projects/CU_statistics_bot.service.bak
 
 # 2. Stop the bot. The new code and the old schema are not compatible.
