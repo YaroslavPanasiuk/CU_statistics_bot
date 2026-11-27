@@ -51,9 +51,8 @@ async def cmd_start(message: types.Message, state: FSMContext):
     await message.answer(select_random_line('SELECT_YOUR_NAME'), reply_markup=get_unregistered_keyboard(unregistered))
 
 @registered_router.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext):
-    user = await database.get_user_by_tg_id(message.from_user.id)
-    await message.answer(f"Привіт, {user.full_name.split()[1]}!", reply_markup=get_main_menu_keyboard())
+async def cmd_start(message: types.Message, state: FSMContext, volunteer: database.User):
+    await message.answer(f"Привіт, {volunteer.full_name.split()[1]}!", reply_markup=get_main_menu_keyboard())
     return
 
 
@@ -63,6 +62,8 @@ async def complete_registration(callback: types.CallbackQuery):
     tg_id = callback.from_user.id
 
     success = await database.register_user(user_db_id, tg_id)
+    # Not the injected `volunteer`: the middleware resolved it before this
+    # registration bound the row, so it was still None.
     user = await database.get_user_by_tg_id(tg_id)
 
     if success:
@@ -94,15 +95,14 @@ async def cmd_fill_stats(message: types.Message, state: FSMContext):
     await initiate_stats_questions(message, state, current_week)
 
 @registered_router.message(or_f(Command("fill_old_stats"),LexiconFilter("SELECT_PREVIOUS_WEEK")))
-async def start_old_stats(message: types.Message, state: FSMContext):
+async def start_old_stats(message: types.Message, state: FSMContext, volunteer: database.User):
     if datetime.now() < datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y"):
             await message.answer(select_random_line('SEMESTER_NOT_STARTED'))
             return
     if datetime.now() > datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y"):
         await message.answer(select_random_line('SEMESTER_OVER'))
         return
-    user = await database.get_user_by_tg_id(message.from_user.id)
-    kb = await get_weeks_keyboard(user.id)
+    kb = await get_weeks_keyboard(volunteer.id)
     await message.answer(select_random_line('SELECT_WEEK'), reply_markup=kb)
     await state.set_state(StatisticsCollection.waiting_for_week)
 
@@ -133,10 +133,9 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
 
 
 @registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
-async def get_my_stats(message: types.Message):
-    user = await database.get_user_by_tg_id(message.from_user.id)
+async def get_my_stats(message: types.Message, volunteer: database.User):
     user_stats = await database.get_all_statistics_for_user(
-        user.id,
+        volunteer.id,
         datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1],
         datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1],
     )
@@ -149,15 +148,15 @@ async def get_my_stats(message: types.Message):
 
 
 @registered_router.message(StatisticsCollection.waiting_for_answer, F.text & ~F.text.startswith("/"))
-async def process_any_answer(message: types.Message, state: FSMContext):
+async def process_any_answer(message: types.Message, state: FSMContext, volunteer: database.User):
     data = await state.get_data()
     current_index = get_next_question_index(data)
 
     await state.update_data({f"answer_{current_index}": message.text})
-    await ask_next_question_or_finish(message, state)
+    await ask_next_question_or_finish(message, state, volunteer)
 
 
-async def finalize_and_save_stats(message: types.Message, state: FSMContext):
+async def finalize_and_save_stats(message: types.Message, state: FSMContext, volunteer: database.User):
     user_data = await state.get_data()
 
     week_num = user_data.get("selected_week")
@@ -167,31 +166,30 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext):
         return
     stats_dict = {k: v for k, v in user_data.items() if k != "selected_week"}
 
-    user = await database.get_user_by_tg_id(message.from_user.id)
-    print(f"User {user.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
+    print(f"User {volunteer.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
 
     await database.save_user_stats(
-        volunteer_id=user.id,
+        volunteer_id=volunteer.id,
         week=week_num,
         data_dict=stats_dict
     )
 
     await message.answer(select_random_line('STATISTICS_GATHERED'), reply_markup=get_main_menu_keyboard())
     await state.clear()
-    await export_stats_to_sheet(user, week_num)
+    await export_stats_to_sheet(volunteer, week_num)
 
 
 def get_next_question_index(user_data: dict) -> int:
     answers = [k for k in user_data.keys() if k.startswith("answer_")]
     return len(answers) + 1
 
-async def ask_next_question_or_finish(message: types.Message, state: FSMContext):
+async def ask_next_question_or_finish(message: types.Message, state: FSMContext, volunteer: database.User):
     data = await state.get_data()
     week = data.get('selected_week')
     next_index = get_next_question_index(data)
 
     if next_index > questions_in_week(week):
-        await finalize_and_save_stats(message, state)
+        await finalize_and_save_stats(message, state, volunteer)
     else:
         question_key = f"QUESTION_{next_index}"
         text = select_random_line(question_key)

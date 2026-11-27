@@ -82,19 +82,6 @@ class TestRegisteredRouterOrder:
         assert names[-1] == "default_handler"
 
 
-@pytest.fixture(scope="module")
-def dispatcher():
-    """Routers are module-level singletons and can only attach to one
-    Dispatcher, so build it once and share it."""
-    from aiogram import Dispatcher
-
-    from bot.handlers import register_handlers
-
-    dp = Dispatcher()
-    register_handlers(dp)
-    return dp
-
-
 class TestRouterInclusionOrder:
     def test_registered_router_is_included_before_the_fallback_router(self, dispatcher):
         """common.router ends in a "you are not registered" catch-all, so it

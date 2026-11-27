@@ -36,3 +36,19 @@ def semester(monkeypatch):
     monkeypatch.setattr(Lexicon, "END_DATE", "21.12.2025", raising=False)
     monkeypatch.setattr(Lexicon, "QUESTION_PATTERN", "323", raising=False)
     return {"start_week": 36, "end_week": 51, "pattern": "323"}
+
+
+@pytest.fixture(scope="session")
+def dispatcher():
+    """The real dispatcher, wired exactly as bot.main wires it.
+
+    Session-scoped because aiogram routers are module-level singletons: a
+    second Dispatcher would raise "Router is already attached".
+    """
+    from aiogram import Dispatcher
+
+    from bot.handlers import register_handlers
+
+    dp = Dispatcher()
+    register_handlers(dp)
+    return dp
