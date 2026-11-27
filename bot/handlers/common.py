@@ -81,7 +81,10 @@ async def cmd_start(message: types.Message, state: FSMContext):
     # reg_<id> callback -- so a stranger could read the roster and then claim
     # someone's identity. The user names themselves instead.
     await message.answer(
-        select_random_line('SELECT_YOUR_NAME'),
+        # SELECT_YOUR_NAME still reads "choose yourself from the list", which
+        # has not been true since the roster keyboard was removed. ASK_NAME was
+        # already in the sheet, unused, saying exactly this.
+        text('ASK_NAME', "Напиши, будь ласка, своє прізвище та ім'я."),
         reply_markup=types.ReplyKeyboardRemove(),
     )
     await state.set_state(Registration.waiting_for_name)
@@ -293,14 +296,18 @@ async def default_handler(message: types.Message):
     await message.answer(random_bible_verse())
 
 @unavailable_router.message()
-async def bot_unavailable(message: types.Message):
+async def bot_unavailable(message: types.Message, volunteer: database.User | None = None):
+    # These are templates in the config sheet -- SEMESTER_NOT_STARTED carries a
+    # {0} -- so they have to go through fill(). select_random_line() left the
+    # literal "{0}" in the message volunteers received.
+    name = display_name(volunteer.full_name) if volunteer else ""
     now = datetime.now()
     if now < datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y"):
-        await message.answer(select_random_line('SEMESTER_NOT_STARTED'))
+        await message.answer(fill('SEMESTER_NOT_STARTED', name))
     elif now > datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y"):
-        await message.answer(select_random_line('SEMESTER_OVER'))
+        await message.answer(fill('SEMESTER_OVER', name))
     else:
-        await message.answer(select_random_line('BOT_UNAVAILABLE'))
+        await message.answer(fill('BOT_UNAVAILABLE', name))
 
 @router.message()
 async def not_registered(message: types.Message):
