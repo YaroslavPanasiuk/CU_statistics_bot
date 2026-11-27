@@ -1,3 +1,4 @@
+import logging
 import random
 import re
 from datetime import datetime
@@ -6,6 +7,8 @@ import gspread
 from bot.config import config
 from aiogram.filters import Filter
 from aiogram.types import Message
+
+logger = logging.getLogger(__name__)
 
 # Keys the bot cannot operate without. QUESTION_N / QUESTION_N_NAME are
 # checked separately, against the question count the pattern implies.
@@ -79,7 +82,7 @@ def fill(key: str, *args) -> str:
     try:
         return template.format(*args)
     except (IndexError, KeyError, ValueError):
-        print(f"Lexicon key {key!r} has a malformed placeholder; sending it unsubstituted")
+        logger.warning(f"Lexicon key {key!r} has a malformed placeholder; sending it unsubstituted")
         return template
 
 class LexiconFilter(Filter):

@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, types
 from aiogram.filters import CommandStart, Command, or_f
 from aiogram.fsm.context import FSMContext
@@ -14,6 +15,8 @@ from bot.filters.bot_available import BotAvailable
 from aiogram import F
 from bot.lexicon import Lexicon
 from bot.config import config
+
+logger = logging.getLogger(__name__)
 
 class Registration(StatesGroup):
     waiting_for_name = State()
@@ -111,13 +114,29 @@ async def cmd_start_registered(message: types.Message, state: FSMContext, volunt
     )
 
 
-async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
+async def initiate_stats_questions(
+    message: types.Message, state: FSMContext, week_num: int, announce: bool = True
+):
+    """Start the questionnaire for a week.
+
+    Refuses a week that asks nothing. It used to send QUESTION_1 regardless,
+    so an out-of-range week collected one answer and saved it -- which is how
+    the stray week-33 row got into production.
+    """
+    if questions_in_week(week_num) < 1:
+        await message.answer(select_random_line('BOT_UNAVAILABLE'))
+        await state.clear()
+        return
+
     await state.update_data(selected_week=week_num)
 
-    await message.answer(f"{select_random_line('SELECTED_WEEK')}{week_num} ({week_num_to_dates(week_num)})")
+    if announce:
+        await message.answer(
+            f"{select_random_line('SELECTED_WEEK')} {week_num} ({week_num_to_dates(week_num)})"
+        )
     await message.answer(
-        f"{select_random_line("QUESTION_1")}",
-        reply_markup=types.ReplyKeyboardRemove()
+        select_random_line("QUESTION_1"),
+        reply_markup=types.ReplyKeyboardRemove(),
     )
     await state.set_state(StatisticsCollection.waiting_for_answer)
 
@@ -140,9 +159,12 @@ async def process_week_callback(
 ):
     week_num = callback_data.number
 
-    await callback.message.edit_text(f"{select_random_line('SELECTED_WEEK')} {week_num} ({week_num_to_dates(week_num)})")
-
-    await initiate_stats_questions(callback.message, state, week_num)
+    # The edit replaces the week-picker with the choice, so initiate must not
+    # announce it a second time.
+    await callback.message.edit_text(
+        f"{select_random_line('SELECTED_WEEK')} {week_num} ({week_num_to_dates(week_num)})"
+    )
+    await initiate_stats_questions(callback.message, state, week_num, announce=False)
 
     await callback.answer()
 
@@ -210,7 +232,7 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext, vol
         return
     stats_dict = {k: v for k, v in user_data.items() if k != "selected_week"}
 
-    print(f"User {volunteer.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
+    logger.info(f"User {volunteer.full_name} has filled stats for week {week_num}: {stats_dict.values()}")
 
     await database.save_user_stats(
         volunteer_id=volunteer.id,

@@ -1,3 +1,4 @@
+import logging
 import asyncio
 import time
 from datetime import datetime
@@ -9,6 +10,8 @@ from bot.config import config
 from bot.db import database
 from bot.lexicon import Lexicon
 from bot.utils.maths import questions_in_week, week_to_column_coords, week_to_indices
+
+logger = logging.getLogger(__name__)
 
 # Every operation used to build a fresh service-account client and re-open the
 # spreadsheet by URL -- three extra round trips per call, against a quota of
@@ -57,7 +60,7 @@ def with_retry(fn, *args, attempts: int = 4, **kwargs):
             status = getattr(getattr(e, "response", None), "status_code", None)
             if status not in RETRYABLE_STATUSES or attempt == attempts:
                 raise
-            print(f"Sheets API {status}; retrying in {delay:.0f}s (attempt {attempt}/{attempts})")
+            logger.warning(f"Sheets API {status}; retrying in {delay:.0f}s (attempt {attempt}/{attempts})")
             time.sleep(delay)
             delay *= 2
 
@@ -128,14 +131,14 @@ async def export_stats_to_sheet(volunteer, week):
     try:
         stats = await database.get_user_statistics(volunteer_id=volunteer.id, week=week)
         if not stats:
-            print(f"Export skipped: no stored statistics for {volunteer.full_name} week {week}")
+            logger.warning(f"Export skipped: no stored statistics for {volunteer.full_name} week {week}")
             return
 
         row = await volunteer_to_row_coord(volunteer)
         if row < 0:
             # Previously this formatted an invalid A1 range like "C-1:F-1" and
             # relied on the except below to swallow the resulting error.
-            print(f"Export skipped: {volunteer.full_name} is not in the sheet roster")
+            logger.warning(f"Export skipped: {volunteer.full_name} is not in the sheet roster")
             return
 
         first_column, last_column = week_to_column_coords(week).split()
@@ -144,7 +147,7 @@ async def export_stats_to_sheet(volunteer, week):
 
         await asyncio.to_thread(write_values, a1_range, values)
     except Exception as e:
-        print(f"Export failed: {e}")
+        logger.error(f"Export failed: {e}")
 
 
 async def import_stats_from_sheet():
@@ -153,17 +156,17 @@ async def import_stats_from_sheet():
     except Exception as e:
         # The import loop below used to sit outside this try, so a Sheets
         # failure printed here and then raised NameError on `values`.
-        print(f"Import failed: {e}")
+        logger.error(f"Import failed: {e}")
         return
 
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
     end_week = datetime.strptime(Lexicon.END_DATE, "%d.%m.%Y").isocalendar()[1]
     current_week = datetime.now().isocalendar()[1]
     if current_week > end_week:
-        print(f"Current week {current_week} is greater than end week {end_week}. No stats to import.")
+        logger.warning(f"Current week {current_week} is greater than end week {end_week}. No stats to import.")
         return
     if current_week < start_week:
-        print(f"Current week {current_week} is less than start week {start_week}. No stats to import.")
+        logger.warning(f"Current week {current_week} is less than start week {start_week}. No stats to import.")
         return
 
     for row in values[2:]:
@@ -172,10 +175,10 @@ async def import_stats_from_sheet():
             continue
         volunteer = await database.get_user_by_full_name(volunteer_name)
         if volunteer is None:
-            print(f"Skipping {volunteer_name} - not in the database")
+            logger.warning(f"Skipping {volunteer_name} - not in the database")
             continue
         if volunteer.tg_id is None:
-            print(f"Skipping {volunteer_name} - not registered")
+            logger.warning(f"Skipping {volunteer_name} - not registered")
             continue
         for offset in range(current_week - start_week + 1):
             week = offset + start_week
@@ -193,7 +196,7 @@ async def import_stats_from_sheet():
                     data_dict=stats_dict
                 )
             except Exception as e:
-                print(f"Failed to save stats for {volunteer_name} in week {week}: {e}")
+                logger.error(f"Failed to save stats for {volunteer_name} in week {week}: {e}")
 
 
 

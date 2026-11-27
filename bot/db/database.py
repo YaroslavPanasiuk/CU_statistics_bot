@@ -1,3 +1,4 @@
+import logging
 import asyncio
 from datetime import datetime
 from pathlib import Path
@@ -24,6 +25,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 from bot.config import config
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(config.DATABASE_URL)
 Session = async_sessionmaker(bind=engine)
@@ -219,7 +222,7 @@ async def sync_volunteers(names_list: list[str]):
         )
         removed_names = list(removed.scalars().all())
         if removed_names:
-            print(f"sync_volunteers: removed {len(removed_names)} volunteer(s) absent from the sheet: {removed_names}")
+            logger.warning(f"sync_volunteers: removed {len(removed_names)} volunteer(s) absent from the sheet: {removed_names}")
 
         await session.commit()
 
@@ -254,15 +257,6 @@ async def unregister_user(tg_id: int) -> bool:
         )
         await session.commit()
         return result.rowcount == 1
-
-
-async def export_data() -> list[WeekStats]:
-    async with Session() as session:
-        stmt = select(
-            User.full_name, UserStats.stats, UserStats.week, UserStats.last_modified
-        ).join(User, User.id == UserStats.volunteer_id)
-        result = await session.execute(stmt)
-        return [WeekStats(*row) for row in result.all()]
 
 
 async def get_user_statistics(volunteer_id: int, week: int) -> list[WeekStats]:
