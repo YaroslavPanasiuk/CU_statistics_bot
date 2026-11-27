@@ -141,9 +141,12 @@ git status --porcelain | grep -v '\.pyc'      # expect only mode changes
 git diff --numstat -- . ':(exclude)*.pyc'      # expect 0 insertions, 0 deletions
 
 # 1. Back up, and keep the current unit file for rollback.
-pg_dump --no-owner --no-acl "$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#^postgresql\+asyncpg#postgresql#')" > ~/custat_pre_migration_$(date +%F).sql
-ls -l ~/custat_pre_migration_*.sql             # sanity: not empty
-cp /etc/systemd/system/CU_statistics_bot.service ~/CU_statistics_bot.service.bak
+#    Note the path: /home/yaros is drwxr-sr-x root:users, so your own home is
+#    NOT writable -- only ~/Projects below it is. Avoid /tmp, which is a tmpfs
+#    and would lose the backup on a reboot.
+pg_dump --no-owner --no-acl "$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#^postgresql\+asyncpg#postgresql#')" > ~/Projects/custat_pre_migration_$(date +%F).sql
+ls -l ~/Projects/custat_pre_migration_*.sql   # expect roughly 80 KB             # sanity: not empty
+cp /etc/systemd/system/CU_statistics_bot.service ~/Projects/CU_statistics_bot.service.bak
 
 # 2. Stop the bot. The new code and the old schema are not compatible.
 sudo systemctl stop CU_statistics_bot
@@ -188,9 +191,9 @@ Rollback:
 ```bash
 sudo systemctl stop CU_statistics_bot
 venv/bin/python -m alembic downgrade 0001      # restores tg_id and the archived rows
-# or, if that misbehaves:  psql "$(deploy/dsn.sh)" < ~/custat_pre_migration_<date>.sql
+# or, if that misbehaves:  psql "$(deploy/dsn.sh)" < ~/Projects/custat_pre_migration_<date>.sql
 git checkout 2e884be
-sudo cp ~/CU_statistics_bot.service.bak /etc/systemd/system/CU_statistics_bot.service
+sudo cp ~/Projects/CU_statistics_bot.service.bak /etc/systemd/system/CU_statistics_bot.service
 sudo systemctl daemon-reload && sudo systemctl start CU_statistics_bot
 ```
 
