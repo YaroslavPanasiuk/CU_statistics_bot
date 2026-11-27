@@ -1,6 +1,4 @@
 """Starting and announcing the questionnaire."""
-from types import SimpleNamespace
-
 import pytest
 
 from bot.handlers import common

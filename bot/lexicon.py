@@ -72,6 +72,20 @@ def select_random_line(key):
     return random.choice(value.split(';;'))
 
 
+def text(key: str, default: str) -> str:
+    """A sheet-authored string with a built-in fallback.
+
+    Lets these strings be customised from the config sheet without obliging
+    every deployment to add the key: validate_config only insists on the keys
+    the bot genuinely cannot work without. Supports ';;' variants like
+    select_random_line.
+    """
+    value = getattr(Lexicon, key, None)
+    if not value:
+        return default
+    return random.choice(value.split(';;'))
+
+
 def fill(key: str, *args) -> str:
     """Substitute into a sheet-authored template, tolerating stray braces.
 
@@ -98,6 +112,16 @@ class LexiconFilter(Filter):
         # meant that adding a second variant to a key silently killed its
         # button: the label no longer equalled the stored string.
         return message.text in raw.split(';;')
+
+
+def fill_default(key: str, default: str, *args) -> str:
+    """text() plus substitution, tolerating stray braces in the sheet."""
+    template = text(key, default)
+    try:
+        return template.format(*args)
+    except (IndexError, KeyError, ValueError):
+        logger.warning(f"Lexicon key {key!r} has a malformed placeholder; sending it unsubstituted")
+        return template
 
 
 def validate_config() -> None:

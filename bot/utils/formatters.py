@@ -1,5 +1,5 @@
 from datetime import datetime
-from bot.lexicon import Lexicon, LexiconError, select_random_line
+from bot.lexicon import Lexicon, LexiconError, select_random_line, text
 from babel.dates import format_date
 from bot.config import config
 import html
@@ -118,7 +118,7 @@ def format_all_stats_for_user(stats_list) -> str:
     labels -- made Telegram reject the message with a 400.
     """
     if not stats_list:
-        return "Статистика недоступна."
+        return text('NO_STATS_TEXT', "Статистика недоступна.")
 
     keys = set()
     for stat in stats_list:
@@ -133,7 +133,7 @@ def format_all_stats_for_user(stats_list) -> str:
                 value = 0
             totals[key] += value
 
-    lines = ["📊 Твоя статистика за семестр:", ""]
+    lines = [text('STATS_HEADER', "📊 Твоя статистика за семестр:"), ""]
     for key, value in totals.items():
         lines.append(f"<code>{html.escape(pad_label(question_label(key)))} {value}</code>")
     return "\n".join(lines)

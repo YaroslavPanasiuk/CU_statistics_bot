@@ -1,6 +1,6 @@
 from aiogram.utils.keyboard import InlineKeyboardBuilder, ReplyKeyboardBuilder
 from datetime import datetime
-from bot.lexicon import Lexicon, select_random_line
+from bot.lexicon import Lexicon, select_random_line, text
 from bot.utils.formatters import week_num_to_dates
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import ReplyKeyboardMarkup
@@ -29,11 +29,11 @@ async def get_weeks_keyboard(volunteer_id):
     start_week = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").isocalendar()[1]
     for i in range(start_week, current_week+1):
         stats = await database.get_user_statistics(volunteer_id, i)
-        stats_str = "не заповнено"
+        stats_str = text('WEEK_NOT_FILLED', "не заповнено")
         if len(stats) > 0:
             stats_str = ", ".join(list(stats[0].stats.values()))
         builder.button(
-            text=f"Тиждень {i} ({week_num_to_dates(i)}) - {stats_str}",
+            text=f"{text('WEEK_LABEL', "Тиждень")} {i} ({week_num_to_dates(i)}) - {stats_str}",
             callback_data=WeekCallback(number=i).pack()
         )
 

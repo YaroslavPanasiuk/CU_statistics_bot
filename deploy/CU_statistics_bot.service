@@ -1,0 +1,44 @@
+# Hardened replacement for the unit currently installed on the server, which
+# runs as root. The bot binds no ports and only makes outbound connections to
+# Telegram, Google Sheets and a local Postgres, so it needs no privileges.
+#
+# To adopt it:
+#   sudo useradd --system --home /home/yaros/Projects/CU_statistics_bot --shell /usr/sbin/nologin cubot
+#   sudo chown -R cubot: /home/yaros/Projects/CU_statistics_bot
+#   sudo cp deploy/CU_statistics_bot.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl restart CU_statistics_bot
+#
+# Check that the `cubot` user can read .env and reach Postgres before
+# switching: the DSN may rely on peer authentication as root.
+
+[Unit]
+Description=CU_statistics_bot Python Application
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment="PYTHONUNBUFFERED=1"
+User=cubot
+Group=cubot
+WorkingDirectory=/home/yaros/Projects/CU_statistics_bot
+ExecStart=/home/yaros/Projects/CU_statistics_bot/venv/bin/python -m bot.main
+Restart=always
+RestartSec=5
+
+# The bot needs none of this.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

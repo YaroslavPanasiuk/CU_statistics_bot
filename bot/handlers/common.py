@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart, Command, or_f
 from aiogram.fsm.context import FSMContext
 from bot.db import database
 from aiogram.fsm.state import StatesGroup, State
-from bot.lexicon import select_random_line, fill, LexiconFilter
+from bot.lexicon import select_random_line, fill, fill_default, text, LexiconFilter
 from datetime import datetime, timedelta
 from bot.utils.maths import questions_in_week
 from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user, display_name
@@ -91,12 +91,14 @@ async def cmd_start(message: types.Message, state: FSMContext):
 async def process_registration_name(message: types.Message, state: FSMContext):
     volunteer = await find_unregistered_volunteer(message.text)
 
-    # TODO(phase-7): move these strings into the config sheet.
     if volunteer is None or not await database.register_user(volunteer.id, message.from_user.id):
         # Deliberately identical for "no such volunteer", "already registered"
         # and "ambiguous": a specific answer would let anyone test the roster
         # one name at a time.
-        await message.answer("Не вдалося тебе знайти. Перевір написання і спробуй ще раз.")
+        await message.answer(text(
+            'NAME_NOT_RECOGNISED',
+            "Не вдалося тебе знайти. Перевір написання і спробуй ще раз.",
+        ))
         return
 
     await state.clear()
@@ -109,7 +111,7 @@ async def process_registration_name(message: types.Message, state: FSMContext):
 @registered_router.message(CommandStart())
 async def cmd_start_registered(message: types.Message, state: FSMContext, volunteer: database.User):
     await message.answer(
-        f"Привіт, {display_name(volunteer.full_name)}!",
+        fill_default('GREETING', "Привіт, {}!", display_name(volunteer.full_name)),
         reply_markup=get_main_menu_keyboard(),
     )
 
@@ -171,22 +173,25 @@ async def process_week_callback(
 
 @registered_router.message(Command("cancel"))
 async def cmd_cancel(message: types.Message, state: FSMContext):
-    # TODO(phase-7): move these strings into the config sheet with the other
-    # hardcoded Ukrainian text.
     if await state.get_state() is None:
-        await message.answer("Немає чого скасовувати.", reply_markup=get_main_menu_keyboard())
+        await message.answer(
+            text('NOTHING_TO_CANCEL', "Немає чого скасовувати."),
+            reply_markup=get_main_menu_keyboard(),
+        )
         return
     await state.clear()
-    await message.answer("Скасовано.", reply_markup=get_main_menu_keyboard())
+    await message.answer(
+        text('CANCELLED', "Скасовано."),
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
 @registered_router.message(Command("unregister_me"))
 async def cmd_unregister_me(message: types.Message, state: FSMContext, volunteer: database.User):
     await database.unregister_user(volunteer.tg_id)
     await state.clear()
-    # TODO(phase-7): move into the config sheet.
     await message.answer(
-        "Реєстрацію скасовано. Надішли /start, щоб зареєструватися знову.",
+        text('UNREGISTERED', "Реєстрацію скасовано. Надішли /start, щоб зареєструватися знову."),
         reply_markup=types.ReplyKeyboardRemove(),
     )
 
@@ -212,8 +217,9 @@ async def process_any_answer(message: types.Message, state: FSMContext, voluntee
     if answer is None:
         # Stay on the same question. Unvalidated text used to be stored as-is
         # and silently counted as 0 when the totals were rendered.
-        # TODO(phase-7): move this string into the config sheet.
-        await message.answer("Введи, будь ласка, число — наприклад 0 або 3.")
+        await message.answer(
+            text('ANSWER_MUST_BE_A_NUMBER', "Введи, будь ласка, число — наприклад 0 або 3.")
+        )
         return
 
     data = await state.get_data()
@@ -227,7 +233,7 @@ async def finalize_and_save_stats(message: types.Message, state: FSMContext, vol
 
     week_num = user_data.get("selected_week")
     if not week_num:
-        await message.answer("Error: Week data missing. Please restart.")
+        await message.answer(text('SESSION_LOST', "Щось збилося. Почни, будь ласка, спочатку."))
         await state.clear()
         return
     stats_dict = {k: v for k, v in user_data.items() if k != "selected_week"}
@@ -305,4 +311,7 @@ async def not_registered(message: types.Message):
 async def unknown_command(message: types.Message):
     # TODO(phase-7): move this string into the config sheet with the other
     # hardcoded Ukrainian text.
-    await message.answer("Невідома команда.", reply_markup=get_main_menu_keyboard())
+    await message.answer(
+        text('UNKNOWN_COMMAND', "Невідома команда."),
+        reply_markup=get_main_menu_keyboard(),
+    )

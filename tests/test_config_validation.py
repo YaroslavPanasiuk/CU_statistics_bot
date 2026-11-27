@@ -138,3 +138,65 @@ class TestFill:
     def test_a_template_with_no_placeholder_is_returned_as_is(self, monkeypatch):
         monkeypatch.setattr(Lexicon, "K", "Без підстановки", raising=False)
         assert fill("K", "Саша") == "Без підстановки"
+
+
+class TestOptionalStrings:
+    """Strings with a built-in fallback.
+
+    These are customisable from the config sheet, but a deployment that has
+    not added the key must keep working -- validate_config only insists on
+    keys the bot cannot operate without.
+    """
+
+    def test_falls_back_when_the_key_is_absent(self, monkeypatch):
+        from bot.lexicon import text
+
+        monkeypatch.delattr(Lexicon, "NOT_A_REAL_KEY", raising=False)
+        assert text("NOT_A_REAL_KEY", "запасний варіант") == "запасний варіант"
+
+    def test_falls_back_when_the_key_is_blank(self, monkeypatch):
+        from bot.lexicon import text
+
+        monkeypatch.setattr(Lexicon, "BLANK_KEY", "", raising=False)
+        assert text("BLANK_KEY", "запасний варіант") == "запасний варіант"
+
+    def test_the_sheet_wins_when_the_key_is_set(self, monkeypatch):
+        from bot.lexicon import text
+
+        monkeypatch.setattr(Lexicon, "CANCELLED", "Скасовано!", raising=False)
+        assert text("CANCELLED", "default") == "Скасовано!"
+
+    def test_supports_variants(self, monkeypatch):
+        from bot.lexicon import text
+
+        monkeypatch.setattr(Lexicon, "CANCELLED", "а;;б;;в", raising=False)
+        assert {text("CANCELLED", "default") for _ in range(50)} <= {"а", "б", "в"}
+
+    def test_fill_default_substitutes_into_the_fallback(self, monkeypatch):
+        from bot.lexicon import fill_default
+
+        monkeypatch.delattr(Lexicon, "GREETING", raising=False)
+        assert fill_default("GREETING", "Привіт, {}!", "Саша") == "Привіт, Саша!"
+
+    def test_fill_default_substitutes_into_the_sheet_value(self, monkeypatch):
+        from bot.lexicon import fill_default
+
+        monkeypatch.setattr(Lexicon, "GREETING", "Вітаю, {}!", raising=False)
+        assert fill_default("GREETING", "Привіт, {}!", "Саша") == "Вітаю, Саша!"
+
+    def test_fill_default_tolerates_a_stray_brace(self, monkeypatch):
+        from bot.lexicon import fill_default
+
+        monkeypatch.setattr(Lexicon, "GREETING", "Вітаю, {} {oops}", raising=False)
+        assert "Вітаю" in fill_default("GREETING", "Привіт, {}!", "Саша")
+
+    def test_none_of_these_keys_are_required(self):
+        """Adding a fallback key to REQUIRED_KEYS would break every existing
+        deployment on the next restart."""
+        optional = {
+            "NAME_NOT_RECOGNISED", "GREETING", "NOTHING_TO_CANCEL", "CANCELLED",
+            "UNREGISTERED", "ANSWER_MUST_BE_A_NUMBER", "UNKNOWN_COMMAND",
+            "SESSION_LOST", "NO_STATS_TEXT", "STATS_HEADER", "WEEK_NOT_FILLED",
+            "WEEK_LABEL",
+        }
+        assert optional.isdisjoint(REQUIRED_KEYS)
