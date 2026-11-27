@@ -88,31 +88,107 @@ reads it.
 
 ## Deployment
 
-A systemd unit on the `lvivhp` host:
+A systemd unit on the `lvivhp` host, `WorkingDirectory=/home/yaros/Projects/CU_statistics_bot`,
+`ExecStart=venv/bin/python -m bot.main`, `Restart=always`. The database is the
+`Postgrees-custat` Docker container (postgres:17) on `127.0.0.1:5433`, **not**
+the system postgresql cluster on 5432.
 
-```
-/etc/systemd/system/CU_statistics_bot.service
-WorkingDirectory=/home/yaros/Projects/CU_statistics_bot
-ExecStart=venv/bin/python -m bot.main
-Restart=always, RestartSec=5
-```
-
-Postgres runs on the same box. Deploying:
+Routine deploy:
 
 ```bash
-ssh lvivhp
-cd ~/Projects/CU_statistics_bot
-pg_dump "$DATABASE_URL" > ~/backup_$(date +%F).sql   # before any migration
+ssh lvivhp && cd ~/Projects/CU_statistics_bot
 git pull
-venv/bin/pip install -r requirements.txt             # when pins change
+venv/bin/pip install -r requirements.txt   # when the pins change
 sudo systemctl restart CU_statistics_bot
 journalctl -u CU_statistics_bot -f
 ```
 
-The installed unit runs as **root**, which the bot does not need.
-`deploy/CU_statistics_bot.service` is a hardened replacement with a dedicated
-user and the usual `Protect*` restrictions; adopting it is a manual step
-documented in that file.
+`init_db()` runs `alembic upgrade head` at startup, so schema changes need no
+separate step.
+
+### One-off: the volunteer_id migration and the unprivileged unit
+
+Both want a restart, so do them in one window. Every `sudo` step needs your
+password. Rehearsed end to end against a `pg_dump` of production restored into
+a throwaway postgres:17 container.
+
+```bash
+ssh lvivhp && cd ~/Projects/CU_statistics_bot
+DB=$(grep -E '^DATABASE_URL=' .env | sed -E 's/^DATABASE_URL="?//; s/"?$//; s#postgresql\+asyncpg#postgresql#')
+
+# 0. Pre-flight. Record the starting row count; the expected results below are
+#    relative to it, because volunteers keep submitting until the bot stops.
+psql "$DB" -c "SELECT count(*) AS before FROM statistics;"
+git status --porcelain | grep -v '\.pyc'      # expect only mode changes
+git diff --numstat -- . ':(exclude)*.pyc'      # expect 0 insertions, 0 deletions
+
+# 1. Back up, and keep the current unit file for rollback.
+pg_dump --no-owner --no-acl "$DB" > ~/custat_pre_migration_$(date +%F).sql
+cp /etc/systemd/system/CU_statistics_bot.service ~/CU_statistics_bot.service.bak
+
+# 2. Stop the bot. The new code and old schema are not compatible.
+sudo systemctl stop CU_statistics_bot
+
+# 3. Deploy. core.fileMode=false clears the 644->755 drift that otherwise
+#    blocks the pull; the tracked .pyc files are removed by this commit.
+git config core.fileMode false
+git checkout -- .
+git pull origin main
+venv/bin/pip install -r requirements.txt       # alembic is new
+
+# 4. Migrate. The tables already exist, so stamp the baseline first.
+venv/bin/python -m alembic stamp 0001
+venv/bin/python -m alembic upgrade head
+#    Expect: "0002: archived 104 orphaned row(s), deleted 1 command-answer
+#    row(s), removed 104 orphan(s) from statistics"
+
+# 5. Verify before starting anything.
+psql "$DB" -c "SELECT count(*) AS live FROM statistics;"                       # before - 105
+psql "$DB" -c "SELECT count(*) AS archived FROM statistics_archive;"           # 104
+psql "$DB" -c "SELECT count(*) AS unowned FROM statistics WHERE volunteer_id IS NULL;"  # 0
+venv/bin/python -m alembic check                                               # no new operations
+
+# 6. Drop root. The service user only needs group `users`, which already has
+#    rwx on the project directory, so nothing is chowned.
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin -G users cubot
+sudo chgrp users .env && sudo chmod 640 .env   # currently 2775: world-readable
+sudo cp deploy/CU_statistics_bot.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# 7. Start and watch.
+sudo systemctl start CU_statistics_bot
+journalctl -u CU_statistics_bot -f
+```
+
+Expect in the log: lexicon loaded, schema upgraded, then
+`sync_volunteers: removed 1 volunteer(s) absent from the sheet: ['']` — that is
+the blank-named row the old roster parser created, cleaning itself up.
+
+Rollback:
+
+```bash
+sudo systemctl stop CU_statistics_bot
+venv/bin/python -m alembic downgrade 0001      # restores tg_id and the archived rows
+git checkout 2e884be
+sudo cp ~/CU_statistics_bot.service.bak /etc/systemd/system/CU_statistics_bot.service
+sudo systemctl daemon-reload && sudo systemctl start CU_statistics_bot
+```
+
+If the hardened unit fails to start, drop `MemoryDenyWriteExecute` first — it
+is the setting most likely to upset a compiled extension — then
+`ProtectSystem`. The `.bak` copy is the fast way back.
+
+## Security notes
+
+Two things found on the host that are worth fixing but are not code changes:
+
+- **`.env` is mode 2775**, so it is world-readable. It holds `BOT_TOKEN` and
+  the Google service-account private key, which means any user on the box can
+  read both. Step 6 above sets it to 640.
+- **The Postgres containers publish on `0.0.0.0`** (`5433` and `5434`), so the
+  databases are reachable from the network rather than only from localhost.
+  Binding them to `127.0.0.1:5433:5432` would close that off; it needs a
+  container restart, so it is left out of this window.
 
 ## Known limitations
 

@@ -1,32 +1,48 @@
-# Hardened replacement for the unit currently installed on the server, which
-# runs as root. The bot binds no ports and only makes outbound connections to
-# Telegram, Google Sheets and a local Postgres, so it needs no privileges.
+# Hardened replacement for the unit installed on lvivhp, which runs as root.
+# The bot binds no ports and only makes outbound connections (Telegram API,
+# Google Sheets, and Postgres over TCP on 127.0.0.1:5433), so it needs no
+# privileges at all.
 #
-# To adopt it:
-#   sudo useradd --system --home /home/yaros/Projects/CU_statistics_bot --shell /usr/sbin/nologin cubot
-#   sudo chown -R cubot: /home/yaros/Projects/CU_statistics_bot
+# Verified against the host before writing:
+#   - the database is the `Postgrees-custat` Docker container, not the system
+#     postgresql cluster, hence After=docker.service
+#   - the DSN is postgresql+asyncpg://...@127.0.0.1:5433/custat_db -- TCP with
+#     a username and password, so ProtectSystem=strict cannot break it the way
+#     it would a unix-socket connection
+#   - the project directory and .env are root:users with group rwx, so a
+#     service user in the `users` group needs no chown
+#
+# Install (see README.md for the full window alongside the migration):
+#   sudo useradd --system --no-create-home --shell /usr/sbin/nologin -G users cubot
+#   sudo chmod 640 .env           # currently 2775: world-readable secrets
+#   sudo chgrp users .env
 #   sudo cp deploy/CU_statistics_bot.service /etc/systemd/system/
 #   sudo systemctl daemon-reload && sudo systemctl restart CU_statistics_bot
 #
-# Check that the `cubot` user can read .env and reach Postgres before
-# switching: the DSN may rely on peer authentication as root.
+# If it fails to start, drop MemoryDenyWriteExecute first -- it is the setting
+# most likely to upset a compiled extension -- then ProtectSystem.
 
 [Unit]
 Description=CU_statistics_bot Python Application
-After=network-online.target postgresql.service
+After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 Environment="PYTHONUNBUFFERED=1"
+# ProtectHome below makes the project directory read-only, so bytecode
+# caching would fail on every import. Skip it explicitly instead.
+Environment="PYTHONDONTWRITEBYTECODE=1"
 User=cubot
 Group=cubot
+# Grants read access to .env and the venv, which are root:users with group rwx.
+SupplementaryGroups=users
 WorkingDirectory=/home/yaros/Projects/CU_statistics_bot
 ExecStart=/home/yaros/Projects/CU_statistics_bot/venv/bin/python -m bot.main
 Restart=always
 RestartSec=5
 
-# The bot needs none of this.
+# The bot writes no files, opens no listening sockets and needs no devices.
 NoNewPrivileges=true
 PrivateTmp=true
 PrivateDevices=true
@@ -37,6 +53,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 RestrictSUIDSGID=true
+RestrictNamespaces=true
 LockPersonality=true
 MemoryDenyWriteExecute=true
 
