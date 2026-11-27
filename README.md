@@ -177,16 +177,24 @@ sudo chgrp users .env && sudo chmod 640 .env   # currently 2775: world-readable
 sudo cp deploy/CU_statistics_bot.service /etc/systemd/system/
 sudo systemctl daemon-reload
 
-# 7. Start.
+# 7. Start. (On a first install use `start`; step 8 below uses `restart`,
+#    which is the right verb for every later deploy.)
 sudo systemctl start CU_statistics_bot
 
 # 8. VERIFY IT IS ACTUALLY RUNNING. Do not skip this: `systemctl is-active`
 #    reports "active" during an auto-restart cycle, so a service crash-looping
-#    every RestartSec=5 looks healthy. Check that the restart counter is frozen
-#    and that a process actually exists.
-systemctl show CU_statistics_bot -p NRestarts -p MainPID --no-pager; sleep 25
-systemctl show CU_statistics_bot -p NRestarts -p MainPID --no-pager
-#    Same NRestarts twice and a non-zero MainPID = healthy.
+#    every RestartSec=5 looks healthy. It reported Result=success and
+#    ExecMainStatus=0 through a twelve-hour outage.
+#
+#    Note the PID *before* restarting, so you can tell "restarted cleanly"
+#    from "never restarted" -- both show a frozen counter and a live PID.
+BEFORE=$(systemctl show CU_statistics_bot -p MainPID --value); echo "pid before: $BEFORE"
+sudo systemctl restart CU_statistics_bot
+sleep 25
+systemctl show CU_statistics_bot -p NRestarts -p MainPID -p ActiveEnterTimestamp --no-pager
+#    Healthy = MainPID is non-zero AND different from $BEFORE, and NRestarts
+#    is unchanged over a second sample 25s later.
+sleep 25; systemctl show CU_statistics_bot -p NRestarts -p MainPID --no-pager
 #    Climbing NRestarts with MainPID=0 = crash loop; see below.
 
 #    Startup completed only if sync_volunteers ran, which is after
