@@ -108,20 +108,31 @@ separate step.
 
 ### One-off: the volunteer_id migration and the unprivileged unit
 
-Both want a restart, so do them in one window. Every `sudo` step needs your
-password. Rehearsed end to end against a `pg_dump` of production restored into
-a throwaway postgres:17 container.
+Both want a restart, so do them in one window. Rehearsed end to end against a
+`pg_dump` of production restored into a throwaway postgres:17 container.
+
+**Run this in an interactive ssh session**, from a real terminal:
 
 ```bash
-ssh lvivhp && cd ~/Projects/CU_statistics_bot
+ssh lvivhp
+cd ~/Projects/CU_statistics_bot
+```
 
-# Each command below is self-contained. Do NOT split a DSN into a `DB=...`
-# variable and use it later: if every command runs in its own shell -- which
-# is what Claude Code's `!` prefix does -- the variable is gone by the next
-# one, psql falls back to a local socket as your own user, and you get
-# 'role "yaros" does not exist'.
+Not as a series of non-interactive one-liners. Several steps need a `sudo`
+password, which requires a TTY (`ssh host 'sudo ...'` just fails with "sudo: a
+password is required"), and `~/Projects/CU_statistics_bot` is a path **on the
+server** -- running it locally lands in the wrong place or fails outright,
+which is easy to miss when `&&` then short-circuits the rest of the line.
+
+```bash
+# Each command is self-contained, so it is safe to run them one at a time.
+# Do not split a DSN into a `DB=...` variable for use in a later command: in
+# any setup where each command gets a fresh shell the variable is gone by the
+# next one, psql falls back to a local socket as the invoking user, and you get
+# 'role "yaros" does not exist' -- which reads like a database fault rather
+# than an empty variable.
 #
-# After step 3, deploy/dsn.sh does this for you: psql "$(deploy/dsn.sh)" ...
+# After step 3, deploy/dsn.sh does the extraction: psql "$(deploy/dsn.sh)" ...
 
 # 0. Pre-flight. Note the row count: the checks in step 5 are relative to it,
 #    because volunteers keep submitting until the bot stops.
