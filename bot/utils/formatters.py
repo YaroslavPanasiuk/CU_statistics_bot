@@ -7,6 +7,19 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 from bot.res.Bible_books_dict import BIBLE_BOOKS_UA
 
+def display_name(full_name: str) -> str:
+    """How to address a volunteer.
+
+    The sheet stores "Surname Given", so the given name is the second token.
+    Callers used `full_name.split()[1]` directly, which raised IndexError on
+    any single-word name.
+    """
+    parts = full_name.split()
+    if len(parts) >= 2:
+        return parts[1]
+    return parts[0] if parts else full_name
+
+
 def week_num_to_dates(week:int):
     year = datetime.strptime(Lexicon.START_DATE, "%d.%m.%Y").year
     monday = datetime.fromisocalendar(year, week, 1).date()

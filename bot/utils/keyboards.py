@@ -39,11 +39,3 @@ async def get_weeks_keyboard(volunteer_id):
 
     builder.adjust(1)
     return builder.as_markup(resize_keyboard=True, one_time_keyboard=True)
-
-def get_unregistered_keyboard(users):
-    builder = InlineKeyboardBuilder()
-    for user in users:
-        builder.button(text=user.full_name, callback_data=f"reg_{user.id}")
-
-    builder.adjust(2)
-    return builder.as_markup()

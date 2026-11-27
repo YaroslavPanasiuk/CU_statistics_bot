@@ -6,8 +6,8 @@ from aiogram.fsm.state import StatesGroup, State
 from bot.lexicon import select_random_line, LexiconFilter
 from datetime import datetime, timedelta
 from bot.utils.maths import questions_in_week
-from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user
-from bot.utils.keyboards import get_weeks_keyboard, get_unregistered_keyboard, WeekCallback, get_main_menu_keyboard
+from bot.utils.formatters import week_num_to_dates, random_bible_verse, format_all_stats_for_user, display_name
+from bot.utils.keyboards import get_weeks_keyboard, WeekCallback, get_main_menu_keyboard
 from bot.utils.spreadsheets import export_stats_to_sheet
 from bot.filters.is_registered import IsNotRegistered, IsRegistered
 from bot.filters.bot_available import BotAvailable
@@ -40,37 +40,75 @@ unavailable_router.message.filter(~BotAvailable())
 
 
 
+def normalise_name(name: str) -> str:
+    return " ".join(name.split()).casefold()
+
+
+async def find_unregistered_volunteer(typed: str):
+    """The one unregistered volunteer matching this name, or None.
+
+    Returns None when nothing matches *and* when several things do, so the
+    caller always answers the same way and the roster cannot be probed.
+    """
+    candidates = await database.get_unregistered_users()
+    wanted = normalise_name(typed)
+
+    matches = [u for u in candidates if normalise_name(u.full_name) == wanted]
+    if len(matches) == 1:
+        return matches[0]
+
+    # The sheet stores "Surname Given"; people often type it the other way
+    # round. Compare the tokens without regard to order.
+    wanted_tokens = sorted(wanted.split())
+    if wanted_tokens:
+        matches = [
+            u for u in candidates
+            if sorted(normalise_name(u.full_name).split()) == wanted_tokens
+        ]
+        if len(matches) == 1:
+            return matches[0]
+
+    return None
+
+
 @router.message(CommandStart())
 async def cmd_start(message: types.Message, state: FSMContext):
-    unregistered = await database.get_unregistered_users()
+    # This used to reply with an inline keyboard listing every unregistered
+    # volunteer by full name, to anyone who found the bot, and accept any
+    # reg_<id> callback -- so a stranger could read the roster and then claim
+    # someone's identity. The user names themselves instead.
+    await message.answer(
+        select_random_line('SELECT_YOUR_NAME'),
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
+    await state.set_state(Registration.waiting_for_name)
 
-    if not unregistered:
-        await message.answer("Всі волонтери вже зареєстровані.")
+
+@router.message(Registration.waiting_for_name, F.text)
+async def process_registration_name(message: types.Message, state: FSMContext):
+    volunteer = await find_unregistered_volunteer(message.text)
+
+    # TODO(phase-7): move these strings into the config sheet.
+    if volunteer is None or not await database.register_user(volunteer.id, message.from_user.id):
+        # Deliberately identical for "no such volunteer", "already registered"
+        # and "ambiguous": a specific answer would let anyone test the roster
+        # one name at a time.
+        await message.answer("Не вдалося тебе знайти. Перевір написання і спробуй ще раз.")
         return
 
-    await message.answer(select_random_line('SELECT_YOUR_NAME'), reply_markup=get_unregistered_keyboard(unregistered))
+    await state.clear()
+    await message.answer(
+        select_random_line('REGISTRATION_COMPLETE').format(display_name(volunteer.full_name)),
+        reply_markup=get_main_menu_keyboard(),
+    )
+
 
 @registered_router.message(CommandStart())
-async def cmd_start(message: types.Message, state: FSMContext, volunteer: database.User):
-    await message.answer(f"Привіт, {volunteer.full_name.split()[1]}!", reply_markup=get_main_menu_keyboard())
-    return
-
-
-@router.callback_query(F.data.startswith("reg_"))
-async def complete_registration(callback: types.CallbackQuery):
-    user_db_id = int(callback.data.split("_")[1])
-    tg_id = callback.from_user.id
-
-    success = await database.register_user(user_db_id, tg_id)
-    # Not the injected `volunteer`: the middleware resolved it before this
-    # registration bound the row, so it was still None.
-    user = await database.get_user_by_tg_id(tg_id)
-
-    if success:
-        await callback.message.edit_text(select_random_line('REGISTRATION_COMPLETE').format(user.full_name.split()[1]))
-    else:
-        await callback.answer("Error: Name already taken or not found.", show_alert=True)
-    await callback.bot.send_message(callback.from_user.id, "Меню:", reply_markup=get_main_menu_keyboard())
+async def cmd_start_registered(message: types.Message, state: FSMContext, volunteer: database.User):
+    await message.answer(
+        f"Привіт, {display_name(volunteer.full_name)}!",
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
 async def initiate_stats_questions(message: types.Message, state: FSMContext, week_num: int):
@@ -118,6 +156,17 @@ async def cmd_cancel(message: types.Message, state: FSMContext):
         return
     await state.clear()
     await message.answer("Скасовано.", reply_markup=get_main_menu_keyboard())
+
+
+@registered_router.message(Command("unregister_me"))
+async def cmd_unregister_me(message: types.Message, state: FSMContext, volunteer: database.User):
+    await database.unregister_user(volunteer.tg_id)
+    await state.clear()
+    # TODO(phase-7): move into the config sheet.
+    await message.answer(
+        "Реєстрацію скасовано. Надішли /start, щоб зареєструватися знову.",
+        reply_markup=types.ReplyKeyboardRemove(),
+    )
 
 
 @registered_router.message(or_f(Command("get_my_stats"),LexiconFilter("GET_MY_STATS")))
