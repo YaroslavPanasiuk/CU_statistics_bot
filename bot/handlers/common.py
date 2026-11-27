@@ -205,7 +205,7 @@ async def get_my_stats(message: types.Message, volunteer: database.User):
     )
 
     if not user_stats:
-        await message.answer(select_random_line('NO_STATS_AVAILABLE'))
+        await message.answer(text('NO_STATS_AVAILABLE', "Статистика ще недоступна."))
         return
 
     await message.answer(format_all_stats_for_user(user_stats), parse_mode="HTML")

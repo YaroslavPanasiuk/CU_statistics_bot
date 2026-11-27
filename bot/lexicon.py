@@ -12,6 +12,12 @@ logger = logging.getLogger(__name__)
 
 # Keys the bot cannot operate without. QUESTION_N / QUESTION_N_NAME are
 # checked separately, against the question count the pattern implies.
+#
+# Only add a key here after confirming it exists in the live config sheet --
+# `deploy/check_config.py` reports that. NO_STATS_AVAILABLE was added from
+# reading the code alone, was absent from the sheet, and took the bot down in
+# a five-second restart loop on first deploy. Anything that is merely a
+# message belongs in text()/fill_default() with a fallback instead.
 REQUIRED_KEYS = (
     "START_DATE",
     "END_DATE",
@@ -23,7 +29,6 @@ REQUIRED_KEYS = (
     "SELECT_WEEK",
     "SELECTED_WEEK",
     "STATISTICS_GATHERED",
-    "NO_STATS_AVAILABLE",
     "BOT_UNAVAILABLE",
     "SEMESTER_NOT_STARTED",
     "SEMESTER_OVER",

@@ -6,6 +6,8 @@ handler, a bad ADMIN_IDS raised ValueError on every incoming message, and a
 semester spanning New Year made the bot silently declare itself permanently
 unavailable.
 """
+from typing import ClassVar
+
 import pytest
 
 from bot.config import ConfigError, parse_admin_ids
@@ -200,3 +202,34 @@ class TestOptionalStrings:
             "WEEK_LABEL",
         }
         assert optional.isdisjoint(REQUIRED_KEYS)
+
+
+class TestRequiredKeysMatchTheLiveSheet:
+    """REQUIRED_KEYS blocks startup, so it must only name keys that exist.
+
+    NO_STATS_AVAILABLE was added from reading the code, was absent from the
+    production config sheet, and put the bot into a five-second restart loop on
+    first deploy. These are the 44 keys verified present in that sheet on
+    2026-11-27, via deploy/check_config.py.
+    """
+
+    VERIFIED_PRESENT: ClassVar[set[str]] = {
+        "START_DATE", "END_DATE", "QUESTION_PATTERN", "WORKSHEET_NAME",
+        "SELECT_YOUR_NAME", "REGISTRATION_COMPLETE", "NOT_REGISTERED",
+        "SELECT_WEEK", "SELECTED_WEEK", "STATISTICS_GATHERED", "BOT_UNAVAILABLE",
+        "SEMESTER_NOT_STARTED", "SEMESTER_OVER", "FILL_STATISTICS",
+        "SELECT_PREVIOUS_WEEK", "GET_MY_STATS", "REMINDER1", "REMINDER2",
+        "REMINDER3",
+    }
+
+    def test_every_required_key_is_known_to_exist_in_the_sheet(self):
+        unverified = set(REQUIRED_KEYS) - self.VERIFIED_PRESENT
+        assert not unverified, (
+            f"{unverified} is required but not known to exist in the config sheet. "
+            "Confirm with deploy/check_config.py before requiring it, or give it a "
+            "fallback via text()."
+        )
+
+    def test_no_stats_available_is_not_required(self):
+        """It is a message, not structural config; it now has a fallback."""
+        assert "NO_STATS_AVAILABLE" not in REQUIRED_KEYS
