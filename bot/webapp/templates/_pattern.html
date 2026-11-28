@@ -1,0 +1,23 @@
+<section class="panel">
+  <h2 class="panel__title">Як це ляже на семестр</h2>
+  <p class="panel__note">
+    Стовпці — це те, куди в таблиці потрапляють відповіді за тиждень. Саме їх
+    зсуває зміна розкладу.
+  </p>
+  <div class="table-scroll">
+    <table class="weeks">
+      <thead>
+        <tr><th>Тиждень</th><th>Питань</th><th>Стовпці</th></tr>
+      </thead>
+      <tbody>
+        {% for row in preview %}
+        <tr{% if row.questions == 0 %} class="weeks__quiet"{% endif %}>
+          <td>{{ row.week }}</td>
+          <td>{{ row.questions }}</td>
+          <td><code>{{ row.columns }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

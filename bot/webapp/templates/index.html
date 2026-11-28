@@ -1,11 +1,52 @@
 {% extends "base.html" %}
 {% block title %}Тексти{% endblock %}
-{% set active = 'config' %}
 
 {% block content %}
-<h1 class="gate__title">Вітаю, {{ admin.display_name }}</h1>
-<p class="gate__lede">
-  Вхід працює. Сторінки з текстами, розкладом і доступами з’являться далі.
+<h1 class="head">Що бот говорить</h1>
+<p class="head__lede">
+  Кожен рядок — те, що волонтер побачить у Telegram. Якщо для одного пункту
+  задано кілька варіантів, бот щоразу обирає один випадково.
 </p>
+
+{% if saved %}
+<p class="notice">Збережено. Бот підхопить зміну протягом півхвилини.</p>
+{% endif %}
+
+{% if not source_is_database %}
+<p class="notice">
+  Бот зараз читає налаштування з таблиці, а не звідси — у базі ще нічого немає.
+  Збережена тут зміна почне діяти лише після перенесення налаштувань.
+</p>
+{% endif %}
+
+{% for group in groups %}
+<section class="group">
+  <h2 class="group__title">{{ group.label }}</h2>
+  {% if group.help %}<p class="group__help">{{ group.help }}</p>{% endif %}
+
+  <ul class="lines">
+    {% for entry in group.fields %}
+    <li class="line" id="{{ entry.field.key }}">
+      <div class="line__head">
+        <span class="line__label">{{ entry.field.label_uk }}</span>
+        <a class="line__edit" href="/edit/{{ entry.field.key }}">Змінити</a>
+      </div>
+      {% if entry.missing %}
+      <p class="line__missing">Не задано — бот скаже вбудований текст або не запуститься.</p>
+      {% else %}
+      {% for value in entry.phrasings %}
+      <p class="line__said">{{ value }}</p>
+      {% endfor %}
+      {% if entry.phrasings | length > 1 %}
+      <p class="line__note">{{ entry.phrasings | length }} варіанти, бот обирає випадково</p>
+      {% endif %}
+      {% endif %}
+      <p class="line__help">{{ entry.field.help_uk }}</p>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endfor %}
+
 <p class="meta">Версія конфігурації: {{ config_version }}</p>
 {% endblock %}

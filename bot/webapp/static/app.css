@@ -258,3 +258,168 @@ code { font-family: var(--mono); font-size: 0.78em; }
 }
 
 .people__meta { margin-right: auto; color: var(--slate); font-size: 0.88rem; }
+
+/* ----------------------------------------------------------------- groups -- */
+
+.group { margin: 0 0 3.25rem; }
+
+.group__title {
+  margin: 0 0 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+}
+
+.group__help { margin: 0 0 1.5rem; max-width: var(--measure); color: var(--slate); font-size: 0.93rem; }
+
+/* The bot's lines, set as a script: the label is the cue, the line is what is
+   spoken, the help underneath is the stage direction. */
+
+.lines { margin: 0; padding: 0; list-style: none; }
+
+.line { padding: 1.1rem 0; border-bottom: 1px solid var(--rule); }
+.line:last-child { border-bottom: none; }
+
+.line__head {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.line__label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.line__edit {
+  margin-left: auto;
+  color: var(--slate);
+  font-size: 0.88rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.line__edit:hover { color: var(--ochre); }
+
+/* What the bot says, in the serif. This is the content of the whole tool. */
+.line__said {
+  margin: 0 0 0.45rem;
+  max-width: var(--measure);
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--rule);
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  white-space: pre-wrap;
+}
+
+.line__said--was { color: var(--slate); text-decoration: line-through; text-decoration-thickness: 1px; }
+
+.line__note,
+.line__help { margin: 0.35rem 0 0; color: var(--slate); font-size: 0.86rem; max-width: var(--measure); }
+
+.line__missing {
+  margin: 0 0 0.45rem;
+  padding-left: 0.9rem;
+  border-left: 2px solid var(--danger);
+  color: var(--danger);
+}
+
+/* ---------------------------------------------------------------- editing -- */
+
+.crumb { margin: 0 0 1rem; font-size: 0.9rem; }
+.crumb a { color: var(--slate); text-decoration: none; }
+.crumb a:hover { color: var(--ink); }
+
+.box { display: flex; gap: 0.75rem; align-items: flex-start; margin-bottom: 0.75rem; }
+
+.box__ord {
+  flex: 0 0 1.5rem;
+  padding-top: 0.6rem;
+  color: var(--slate);
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
+.box__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--field);
+  color: var(--ink);
+  font-family: var(--serif);
+  font-size: 1rem;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.box__input:focus-visible { outline: 2px solid var(--ochre); outline-offset: 1px; }
+
+.panel--new { border-color: var(--ochre); }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  margin-top: 2rem;
+}
+
+.actions__cancel { color: var(--slate); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ------------------------------------------------------- pattern preview -- */
+
+.table-scroll { overflow-x: auto; }
+
+.weeks {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.weeks th,
+.weeks td { padding: 0.35rem 0.9rem 0.35rem 0; text-align: left; }
+
+.weeks th {
+  border-bottom: 1px solid var(--rule);
+  color: var(--slate);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.weeks__quiet td { color: var(--slate); }
+
+/* ---------------------------------------------------------------- history -- */
+
+.changes { margin: 0; padding: 0; list-style: none; }
+
+.change { padding: 1.1rem 0; border-bottom: 1px solid var(--rule); }
+
+.change__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  margin-bottom: 0.6rem;
+}
+
+.change__what {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.change__who { margin-left: auto; color: var(--slate); font-size: 0.86rem; }
+.change__gone { margin: 0; color: var(--danger); }

@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}{{ field.label_uk }}{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/#{{ field.key }}">← {{ group_label }}</a></p>
+<h1 class="head">{{ field.label_uk }}</h1>
+<p class="head__lede">{{ field.help_uk }}</p>
+
+{% include "_problems.html" %}
+
+<form method="post" action="/edit/{{ field.key }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+
+  <section class="panel">
+    <h2 class="panel__title">
+      {% if field.variants %}Варіанти{% else %}Значення{% endif %}
+    </h2>
+    {% if field.variants %}
+    <p class="panel__note">
+      Бот щоразу обирає один варіант випадково. Щоб прибрати варіант — зітріть
+      його текст. Порожнє поле внизу додає новий.
+    </p>
+    {% endif %}
+
+    {% for box in boxes %}
+    <label class="box">
+      <span class="box__ord">
+        {% if field.variants %}{{ loop.index }}{% else %}—{% endif %}
+      </span>
+      {% if field.kind == Kind.DATE %}
+      <input class="box__input" name="value" value="{{ box }}"
+             placeholder="07.09.2026" inputmode="numeric" autocomplete="off">
+      {% elif field.kind == Kind.PATTERN or field.kind == Kind.WORKSHEET %}
+      <input class="box__input" name="value" value="{{ box }}" autocomplete="off">
+      {% else %}
+      <textarea class="box__input box__input--tall" name="value"
+                rows="{{ 3 if box else 2 }}"
+                maxlength="{{ field.limit }}">{{ box }}</textarea>
+      {% endif %}
+    </label>
+    {% endfor %}
+
+    <p class="panel__note">Максимум {{ field.limit }} символів у кожному варіанті.</p>
+  </section>
+
+  {% if preview %}
+  {% include "_pattern.html" %}
+  {% endif %}
+
+  <div class="actions">
+    <button class="button" type="submit">Далі — переглянути зміну</button>
+    <a class="actions__cancel" href="/#{{ field.key }}">Скасувати</a>
+  </div>
+</form>
+{% endblock %}

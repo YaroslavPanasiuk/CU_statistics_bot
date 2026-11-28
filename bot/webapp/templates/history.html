@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Зміни{% endblock %}
+
+{% block content %}
+<h1 class="head">Хто що змінював</h1>
+<p class="head__lede">
+  Останні 200 змін. Корисно, коли бот раптом почав писати щось не те.
+</p>
+
+{% if not entries %}
+<p class="panel__empty">Поки нічого не змінювали.</p>
+{% endif %}
+
+<ul class="changes">
+  {% for entry in entries %}
+  <li class="change">
+    <div class="change__head">
+      <span class="change__what">{{ entry.label }}</span>
+      <span class="change__who">
+        {{ entry.changed_by }} · {{ entry.changed_at.strftime('%d.%m.%Y %H:%M') }}
+      </span>
+    </div>
+    {% if entry.old %}
+      {% for value in entry.old %}<p class="line__said line__said--was">{{ value }}</p>{% endfor %}
+    {% endif %}
+    {% if entry.new %}
+      {% for value in entry.new %}<p class="line__said">{{ value }}</p>{% endfor %}
+    {% else %}
+      <p class="change__gone">Ключ видалено.</p>
+    {% endif %}
+  </li>
+  {% endfor %}
+</ul>
+{% endblock %}

@@ -14,6 +14,8 @@
   <nav class="bar__nav">
     <a href="/" {% if active == 'config' %}aria-current="page"{% endif %}>Тексти</a>
     <a href="/admins" {% if active == 'admins' %}aria-current="page"{% endif %}>Доступи</a>
+    <a href="/history" {% if active == 'history' %}aria-current="page"{% endif %}>Зміни</a>
+    <a href="/export.json">Резервна копія</a>
   </nav>
   <span class="bar__who">{{ admin.display_name }}</span>
   <a class="bar__out" href="/logout">Вийти</a>

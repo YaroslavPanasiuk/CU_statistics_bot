@@ -9,8 +9,10 @@ nothing here touches the data spreadsheet; the only thing it changes is the
 configuration, and the bot notices within POLL_SECONDS.
 """
 
+import json
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -19,7 +21,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from bot import registry
 from bot.db import configstore
+from bot.utils.maths import number_to_excel_column
 from bot.webapp import validation
 from bot.webapp.auth import (
     SESSION_COOKIE,
@@ -184,13 +188,6 @@ async def logout():
     return response
 
 
-@app.get("/", response_class=HTMLResponse)
-async def index(request: Request, admin: SignedIn):
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {"admin": admin, "config_version": await configstore.version()},
-    )
 
 
 # ------------------------------------------------------------------ admins --
@@ -318,3 +315,327 @@ async def revoke_admin(
     await configstore.remove_admin(target, admin.audit_name)
     logger.info(f"{admin.audit_name} revoked access for {target}")
     return RedirectResponse("/admins", status_code=303)
+
+
+# ----------------------------------------------------------- configuration --
+
+
+def _field_or_404(key: str) -> registry.Field:
+    field = registry.BY_KEY.get(key)
+    if field is None:
+        raise HTTPException(status_code=404, detail=f"No such configuration key: {key}")
+    return field
+
+
+async def _live() -> dict[str, list[str]]:
+    """The configuration as stored. Read fresh: two people may be editing."""
+    return await configstore.load()
+
+
+def _button_labels(live: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Every label the bot matches incoming messages against, by key.
+
+    Passed to validation so saving a label that already belongs to another
+    button is refused rather than quietly shadowing it.
+    """
+    return {
+        f.key: live.get(f.key, [])
+        for f in registry.FIELDS
+        if f.kind is registry.Kind.BUTTON and f.group is not registry.Group.UNUSED
+    }
+
+
+def pattern_preview(
+    pattern: str, start_date: str, end_date: str
+) -> list[dict] | None:
+    """Week by week: how many questions, and which spreadsheet columns.
+
+    The columns are the point. QUESTION_PATTERN decides where a week's answers
+    land, so a change relocates every week after it -- the one thing about this
+    field that is impossible to see from the digits alone.
+    """
+    if not pattern.isdigit() or not pattern:
+        return None
+    try:
+        start = datetime.strptime(start_date, "%d.%m.%Y")
+        end = datetime.strptime(end_date, "%d.%m.%Y")
+    except (TypeError, ValueError):
+        return None
+    if start.year != end.year or end < start:
+        return None
+
+    start_week, end_week = start.isocalendar()[1], end.isocalendar()[1]
+    rows = []
+    column = 3  # the same starting column week_to_indices accumulates from
+    for offset, week in enumerate(range(start_week, end_week + 1)):
+        count = int(pattern[offset % len(pattern)])
+        first = number_to_excel_column(column)
+        last = number_to_excel_column(column + count - 1) if count else None
+        rows.append(
+            {
+                "week": week,
+                "questions": count,
+                "columns": f"{first}–{last}" if count > 1 else (first if count else "—"),
+            }
+        )
+        column += count
+    return rows
+
+
+def _entry(field: registry.Field, values: list[str]) -> dict:
+    """One key as a page shows it.
+
+    The list is called "phrasings", not "values": Jinja resolves
+    ``entry.values`` to the dict's own .values method and silently iterates
+    that instead, which renders nothing and raises only where it is used.
+    """
+    return {
+        "field": field,
+        "phrasings": values,
+        "missing": not values,
+        "label": registry.BY_KEY[field.key].label_uk,
+    }
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index(request: Request, admin: SignedIn, saved: str | None = None):
+    live = await _live()
+    groups = []
+    for group in registry.Group:
+        if group is registry.Group.UNUSED:
+            continue
+        fields = [
+            _entry(f, live.get(f.key, []))
+            for f in registry.fields_in_group(group)
+            # A question the schedule never asks is noise on this page.
+            if not f.conditional or f.key in registry.question_keys(
+                (live.get("QUESTION_PATTERN") or ["0"])[0]
+            )
+        ]
+        if fields:
+            groups.append(
+                {
+                    "group": group,
+                    "label": registry.GROUP_LABELS_UK[group],
+                    "help": registry.GROUP_HELP_UK.get(group, ""),
+                    "fields": fields,
+                }
+            )
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "admin": admin,
+            "active": "config",
+            "groups": groups,
+            "saved": saved,
+            "config_version": await configstore.version(),
+            "source_is_database": bool(live),
+        },
+    )
+
+
+def _draft_values(field: registry.Field, raw: list[str]) -> list[str]:
+    """Form input turned into what would be stored.
+
+    Blank boxes are dropped rather than stored: that is how a phrasing is
+    removed, since there is no delete button per box and nothing here needs
+    JavaScript. CRLF is normalised because a textarea submits it and the bot
+    would send it.
+    """
+    values = [v.replace("\r\n", "\n").strip() for v in raw]
+    return [v for v in values if v]
+
+
+async def _edit_page(
+    request: Request,
+    admin: Admin,
+    field: registry.Field,
+    drafts: list[str],
+    problems: list[validation.Problem] | None = None,
+) -> HTMLResponse:
+    live = await _live()
+    # Always one empty box at the end, so adding a phrasing needs no button
+    # press and removing one is just clearing it.
+    boxes = [*drafts, ""] if field.variants else (drafts or [""])[:1]
+    return templates.TemplateResponse(
+        request,
+        "edit.html",
+        {
+            "admin": admin,
+            "active": "config",
+            "field": field,
+            "boxes": boxes,
+            "stored": live.get(field.key, []),
+            "problems": problems or [],
+            "csrf": issue_csrf(admin),
+            "group_label": registry.GROUP_LABELS_UK[field.group],
+            "preview": _preview_for(field, drafts, live),
+            "Kind": registry.Kind,
+        },
+    )
+
+
+def _preview_for(
+    field: registry.Field, drafts: list[str], live: dict[str, list[str]]
+) -> list[dict] | None:
+    if field.kind is not registry.Kind.PATTERN:
+        return None
+    pattern = (drafts or live.get(field.key) or [""])[0]
+    return pattern_preview(
+        pattern,
+        (live.get("START_DATE") or [""])[0],
+        (live.get("END_DATE") or [""])[0],
+    )
+
+
+async def _validate(
+    field: registry.Field, values: list[str], live: dict[str, list[str]]
+) -> list[validation.Problem]:
+    other_date = None
+    if field.key == "START_DATE":
+        other_date = (live.get("END_DATE") or [None])[0]
+    elif field.key == "END_DATE":
+        other_date = (live.get("START_DATE") or [None])[0]
+    return validation.check_variants(
+        field,
+        values,
+        other_labels=_button_labels(live),
+        other_date=other_date,
+    )
+
+
+@app.get("/edit/{key}", response_class=HTMLResponse)
+async def edit_form(request: Request, admin: SignedIn, key: str):
+    field = _field_or_404(key)
+    return await _edit_page(request, admin, field, (await _live()).get(key, []))
+
+
+@app.post("/edit/{key}", response_class=HTMLResponse)
+async def edit_review(
+    request: Request,
+    admin: SignedIn,
+    key: str,
+    value: Annotated[list[str], Form()] = [],  # noqa: B006 — FastAPI reads the default
+    csrf: Annotated[str, Form()] = "",
+    back: Annotated[str, Form()] = "",
+):
+    """Check the draft and show what will change. Nothing is written here."""
+    field = _field_or_404(key)
+    if not csrf_is_valid(csrf, admin):
+        raise HTTPException(status_code=400, detail=STALE_FORM)
+
+    drafts = _draft_values(field, value)
+    if back:
+        # The review step's way back, carrying the draft so it is not retyped.
+        return await _edit_page(request, admin, field, drafts)
+
+    live = await _live()
+    problems = await _validate(field, drafts, live)
+    if validation.blocking(problems):
+        return await _edit_page(request, admin, field, drafts, problems)
+
+    stored = live.get(key, [])
+    if drafts == stored:
+        return RedirectResponse(f"/#{key}", status_code=303)
+
+    return templates.TemplateResponse(
+        request,
+        "review.html",
+        {
+            "admin": admin,
+            "active": "config",
+            "field": field,
+            "drafts": drafts,
+            "stored": stored,
+            "problems": problems,
+            "csrf": issue_csrf(admin),
+            "group_label": registry.GROUP_LABELS_UK[field.group],
+            "preview": _preview_for(field, drafts, live),
+            "was_preview": _preview_for(field, stored, live),
+            "Kind": registry.Kind,
+        },
+    )
+
+
+@app.post("/save/{key}")
+async def save(
+    request: Request,
+    admin: SignedIn,
+    key: str,
+    value: Annotated[list[str], Form()] = [],  # noqa: B006
+    csrf: Annotated[str, Form()] = "",
+):
+    """Write the change. Re-validated, because the review step is a round trip."""
+    field = _field_or_404(key)
+    if not csrf_is_valid(csrf, admin):
+        raise HTTPException(status_code=400, detail=STALE_FORM)
+
+    live = await _live()
+    drafts = _draft_values(field, value)
+    problems = await _validate(field, drafts, live)
+    if validation.blocking(problems):
+        # Not reachable through the UI; reachable from a stale tab or a
+        # hand-made request, and refusing is the only safe answer.
+        logger.warning(f"refused a save of {key}: {problems[0].message}")
+        return await _edit_page(request, admin, field, drafts, problems)
+
+    await configstore.set_variants(key, drafts, admin.audit_name)
+    logger.info(f"{admin.audit_name} saved {key}")
+    return RedirectResponse(f"/?saved={key}#{key}", status_code=303)
+
+
+@app.get("/history", response_class=HTMLResponse)
+async def history(request: Request, admin: SignedIn):
+    """Who changed what. The answer to "the bot started saying something odd"."""
+    entries = []
+    for row in await configstore.audit(limit=200):
+        field = registry.BY_KEY.get(row.key)
+        entries.append(
+            {
+                "key": row.key,
+                "label": field.label_uk if field else row.key,
+                "changed_by": row.changed_by,
+                "changed_at": row.changed_at,
+                "old": _as_values(row.old_value),
+                "new": _as_values(row.new_value),
+            }
+        )
+    return templates.TemplateResponse(
+        request,
+        "history.html",
+        {"admin": admin, "active": "history", "entries": entries},
+    )
+
+
+def _as_values(raw: str | None) -> list[str]:
+    """An audit value back into a list.
+
+    Stored as JSON because an ordered set of phrasings is the only honest
+    representation; a batch import records an object instead, which is shown
+    as-is rather than pretended to be phrasings.
+    """
+    if raw is None:
+        return []
+    try:
+        parsed = json.loads(raw)
+    except (TypeError, ValueError):
+        return [raw]
+    if isinstance(parsed, list):
+        return [str(v) for v in parsed]
+    return [json.dumps(parsed, ensure_ascii=False)]
+
+
+@app.get("/export.json")
+async def export(admin: SignedIn):
+    """The whole configuration, as a file.
+
+    The database is backed up with the rest of Postgres, but a one-click copy
+    before a risky edit is worth more than a backup you have to ask for.
+    """
+    return JSONResponse(
+        await _live(),
+        headers={
+            "Content-Disposition": 'attachment; filename="custat-config.json"'
+        },
+    )

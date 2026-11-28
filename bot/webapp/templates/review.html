@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Перегляд зміни{% endblock %}
+
+{% block content %}
+<p class="crumb"><a href="/#{{ field.key }}">← {{ group_label }}</a></p>
+<h1 class="head">{{ field.label_uk }}</h1>
+<p class="head__lede">
+  Ще не збережено. Так виглядатиме те, що побачать волонтери.
+</p>
+
+{% include "_problems.html" %}
+
+<section class="panel">
+  <h2 class="panel__title">Було</h2>
+  {% if stored %}
+    {% for value in stored %}<p class="line__said line__said--was">{{ value }}</p>{% endfor %}
+  {% else %}
+    <p class="panel__empty">Не було задано.</p>
+  {% endif %}
+</section>
+
+<section class="panel panel--new">
+  <h2 class="panel__title">Стане</h2>
+  {% for value in drafts %}<p class="line__said">{{ value }}</p>{% endfor %}
+  {% if drafts | length > 1 %}
+  <p class="line__note">{{ drafts | length }} варіанти, бот обирає випадково</p>
+  {% endif %}
+</section>
+
+{% if preview %}
+{% include "_pattern.html" %}
+{% endif %}
+
+<div class="actions">
+  <form method="post" action="/save/{{ field.key }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    {% for value in drafts %}
+    <input type="hidden" name="value" value="{{ value }}">
+    {% endfor %}
+    <button class="button" type="submit">Зберегти</button>
+  </form>
+
+  <form method="post" action="/edit/{{ field.key }}">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="back" value="1">
+    {% for value in drafts %}
+    <input type="hidden" name="value" value="{{ value }}">
+    {% endfor %}
+    <button class="button button--quiet" type="submit">Повернутися до редагування</button>
+  </form>
+</div>
+{% endblock %}
