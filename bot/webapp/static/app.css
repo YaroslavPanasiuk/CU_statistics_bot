@@ -109,3 +109,141 @@ code { font-family: var(--mono); font-size: 0.78em; }
 }
 
 .gate__widget { min-height: 3rem; }
+
+/* ---------------------------------------------------------------- headings -- */
+
+.head {
+  margin: 0 0 0.6rem;
+  font-family: var(--serif);
+  font-size: 1.7rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.head__lede {
+  margin: 0 0 2rem;
+  max-width: var(--measure);
+  color: var(--slate);
+}
+
+/* ------------------------------------------------------------------ panels -- */
+
+.panel {
+  margin: 0 0 2.25rem;
+  padding: 1.25rem 1.5rem 1.5rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: var(--sheet);
+}
+
+.panel__title {
+  margin: 0 0 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+
+.panel__note,
+.panel__empty { margin: 0; color: var(--slate); font-size: 0.93rem; }
+.panel__note { max-width: var(--measure); margin-bottom: 1rem; }
+
+/* -------------------------------------------------------------- notices -- */
+
+.notice {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--ochre);
+  background: var(--sheet);
+}
+
+.problems { margin: 0 0 1.5rem; padding: 0; list-style: none; }
+
+.problems__item {
+  padding: 0.75rem 1rem;
+  background: var(--sheet);
+  border-left: 3px solid var(--rule);
+}
+
+.problems__item--error { border-left-color: var(--danger); color: var(--danger); }
+.problems__item--warning { border-left-color: var(--ochre); }
+
+/* --------------------------------------------------------------- invite -- */
+
+.invite__label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.9rem;
+  color: var(--slate);
+}
+
+.invite__row { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+
+.invite__input {
+  flex: 1 1 16rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.invite__input:focus-visible { outline: 2px solid var(--ochre); outline-offset: 1px; }
+
+.invite__hint { margin: 0.6rem 0 0; color: var(--slate); font-size: 0.88rem; }
+
+/* --------------------------------------------------------------- buttons -- */
+
+.button {
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--ink);
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: inherit;
+  cursor: pointer;
+}
+
+.button:hover { background: #0f1b2a; }
+
+.button--quiet {
+  border-color: var(--rule);
+  background: transparent;
+  color: var(--slate);
+}
+
+.button--quiet:hover { border-color: var(--danger); background: transparent; color: var(--danger); }
+
+/* ---------------------------------------------------------------- people -- */
+
+.people { margin: 0; padding: 0; list-style: none; }
+
+.people__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem 1rem;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--rule);
+}
+
+.people__row:first-child { border-top: none; }
+
+.people__name { font-weight: 700; }
+.people__handle { font-weight: 400; color: var(--slate); }
+
+.people__you {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 2px;
+  background: var(--rule);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.people__meta { margin-right: auto; color: var(--slate); font-size: 0.88rem; }

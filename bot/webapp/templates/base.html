@@ -13,6 +13,7 @@
   <a class="bar__home" href="/">Налаштування бота</a>
   <nav class="bar__nav">
     <a href="/" {% if active == 'config' %}aria-current="page"{% endif %}>Тексти</a>
+    <a href="/admins" {% if active == 'admins' %}aria-current="page"{% endif %}>Доступи</a>
   </nav>
   <span class="bar__who">{{ admin.display_name }}</span>
   <a class="bar__out" href="/logout">Вийти</a>

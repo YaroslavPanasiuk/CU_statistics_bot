@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Доступи{% endblock %}
+
+{% block content %}
+<h1 class="head">Хто може редагувати налаштування</h1>
+<p class="head__lede">
+  Доступ дається нікові в Telegram. Запрошення стає доступом тоді, коли
+  запрошений уперше входить сюди через Telegram — до того бот не знає, який
+  обліковий запис стоїть за ніком.
+</p>
+
+{% if invited %}
+<p class="notice">
+  @{{ invited }} запрошено. Надішліть їм посилання на цю сторінку — доступ
+  з’явиться після першого входу.
+</p>
+{% endif %}
+
+{% include "_problems.html" %}
+
+<section class="panel">
+  <h2 class="panel__title">Запросити</h2>
+  <form class="invite" method="post" action="/admins/invite">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="invite__label" for="username">Нік у Telegram</label>
+    <div class="invite__row">
+      <input class="invite__input" id="username" name="username" value="{{ draft }}"
+             placeholder="@olha_k" autocomplete="off" spellcheck="false">
+      <button class="button" type="submit">Запросити</button>
+    </div>
+    <p class="invite__hint">
+      Можна вставити @нік або посилання t.me/нік.
+    </p>
+  </form>
+</section>
+
+{% if invites %}
+<section class="panel">
+  <h2 class="panel__title">Запрошення, які ще не використані</h2>
+  <ul class="people">
+    {% for invite in invites %}
+    <li class="people__row">
+      <span class="people__name">@{{ invite.username }}</span>
+      <span class="people__meta">
+        запросив {{ invite.invited_by }} ·
+        діє до {{ invite.expires_at.strftime('%d.%m.%Y') }}
+      </span>
+      <form method="post" action="/admins/revoke">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="username" value="{{ invite.username }}">
+        <button class="button button--quiet" type="submit">Скасувати</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="panel">
+  <h2 class="panel__title">Мають доступ</h2>
+
+  {% if granted %}
+  <ul class="people">
+    {% for person in granted %}
+    <li class="people__row">
+      <span class="people__name">
+        {{ person.first_name or '—' }}
+        {% if person.username %}<span class="people__handle">@{{ person.username }}</span>{% endif %}
+        {% if person.is_you %}<span class="people__you">це ви</span>{% endif %}
+      </span>
+      <span class="people__meta">
+        додав {{ person.added_by }} · {{ person.added_at.strftime('%d.%m.%Y') }}
+      </span>
+      {% if not person.is_you %}
+      <form method="post" action="/admins/revoke">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="tg_id" value="{{ person.tg_id }}">
+        <button class="button button--quiet" type="submit">Забрати доступ</button>
+      </form>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="panel__empty">Поки нікого не додано звідси.</p>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <h2 class="panel__title">Задані на сервері</h2>
+  <p class="panel__note">
+    Ці доступи прописані у змінній <code>ADMIN_IDS</code> у файлі
+    <code>.env</code>. Звідси їх не забрати — вони є шляхом назад, якщо список
+    вище колись помилково очистять.
+  </p>
+  <ul class="people">
+    {% for person in from_env %}
+    <li class="people__row">
+      <span class="people__name">
+        <code>{{ person.tg_id }}</code>
+        {% if person.is_you %}<span class="people__you">це ви</span>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endblock %}

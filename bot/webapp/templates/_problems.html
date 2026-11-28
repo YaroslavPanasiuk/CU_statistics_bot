@@ -1,0 +1,7 @@
+{% if problems %}
+<ul class="problems">
+  {% for problem in problems %}
+  <li class="problems__item problems__item--{{ problem.level }}">{{ problem.message }}</li>
+  {% endfor %}
+</ul>
+{% endif %}

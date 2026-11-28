@@ -170,8 +170,23 @@ class AdminInvite(Base):
 
 
 def normalise_username(raw: str) -> str:
-    """Telegram handles are case-insensitive and often pasted with an '@'."""
-    return raw.strip().lstrip("@").casefold()
+    """A Telegram username reduced to its comparable form.
+
+    People paste ``@name``, ``t.me/name`` and ``https://t.me/name``, and
+    Telegram itself treats usernames case-insensitively. One canonical form is
+    what makes "already invited" and "matches this login" answerable at all:
+    an invitation stored as ``t.me/olha`` would never match a login payload's
+    ``olha``, and the person would simply never get in with nothing to explain
+    why.
+    """
+    text = (raw or "").strip()
+    for prefix in ("https://", "http://"):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix) :]
+    for prefix in ("t.me/", "telegram.me/", "telegram.dog/"):
+        if text.lower().startswith(prefix):
+            text = text[len(prefix) :]
+    return text.lstrip("@").strip().casefold()
 
 
 # --------------------------------------------------------------- reading --

@@ -14,18 +14,22 @@ import os
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from bot.db import configstore
+from bot.webapp import validation
 from bot.webapp.auth import (
     SESSION_COOKIE,
     SESSION_MAX_AGE,
     Admin,
     AuthError,
     authorise,
+    csrf_is_valid,
+    env_admin_ids,
+    issue_csrf,
     issue_session,
     read_session,
 )
@@ -183,3 +187,130 @@ async def index(request: Request, admin: SignedIn):
         "index.html",
         {"admin": admin, "config_version": await configstore.version()},
     )
+
+
+# ------------------------------------------------------------------ admins --
+
+STALE_FORM = "Форма застаріла. Відкрийте сторінку заново."
+
+
+async def _admins_page(
+    request: Request,
+    admin: Admin,
+    problems: list[validation.Problem] | None = None,
+    draft: str = "",
+    invited: str | None = None,
+) -> HTMLResponse:
+    granted = await configstore.admins()
+    return templates.TemplateResponse(
+        request,
+        "admins.html",
+        {
+            "admin": admin,
+            "active": "admins",
+            # Shown first and not revocable here: .env is the way back in if
+            # this table is ever emptied by mistake.
+            "from_env": [
+                {"tg_id": tg_id, "is_you": tg_id == admin.tg_id}
+                for tg_id in sorted(env_admin_ids())
+            ],
+            "granted": [
+                {
+                    "tg_id": row.tg_id,
+                    "username": row.username,
+                    "first_name": row.first_name,
+                    "added_by": row.added_by,
+                    "added_at": row.added_at,
+                    "is_you": row.tg_id == admin.tg_id,
+                }
+                for row in granted
+            ],
+            "invites": await configstore.pending_invites(),
+            "problems": problems or [],
+            "draft": draft,
+            "invited": invited,
+            "csrf": issue_csrf(admin),
+        },
+    )
+
+
+@app.get("/admins", response_class=HTMLResponse)
+async def admins_page(request: Request, admin: SignedIn, invited: str | None = None):
+    return await _admins_page(request, admin, invited=invited)
+
+
+@app.post("/admins/invite", response_class=HTMLResponse)
+async def invite_admin(
+    request: Request,
+    admin: SignedIn,
+    username: Annotated[str, Form()] = "",
+    csrf: Annotated[str, Form()] = "",
+):
+    """Invite a username. It becomes access on that person's first sign-in."""
+    if not csrf_is_valid(csrf, admin):
+        raise HTTPException(status_code=400, detail=STALE_FORM)
+
+    handle = configstore.normalise_username(username)
+    problems = validation.check_username(
+        handle,
+        already_admin=handle in {row.username for row in await configstore.admins()},
+        already_invited=handle
+        in {row.username for row in await configstore.pending_invites()},
+    )
+    if validation.blocking(problems):
+        return await _admins_page(request, admin, problems, draft=username)
+
+    await configstore.invite_admin(handle, admin.audit_name)
+    logger.info(f"{admin.audit_name} invited @{handle}")
+    return RedirectResponse(f"/admins?invited={handle}", status_code=303)
+
+
+@app.post("/admins/revoke", response_class=HTMLResponse)
+async def revoke_admin(
+    request: Request,
+    admin: SignedIn,
+    tg_id: Annotated[str, Form()] = "",
+    username: Annotated[str, Form()] = "",
+    csrf: Annotated[str, Form()] = "",
+):
+    """Take back access, or cancel an invitation nobody has used yet."""
+    if not csrf_is_valid(csrf, admin):
+        raise HTTPException(status_code=400, detail=STALE_FORM)
+
+    if username:
+        await configstore.revoke_invite(username, admin.audit_name)
+        logger.info(f"{admin.audit_name} cancelled the invitation for @{username}")
+        return RedirectResponse("/admins", status_code=303)
+
+    try:
+        target = int(tg_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Некоректний ідентифікатор.") from None
+
+    if target == admin.tg_id:
+        # Letting this through locks the person out mid-session, and the only
+        # way back is another admin or the server.
+        return await _admins_page(
+            request,
+            admin,
+            [validation.error("Не можна забрати доступ у себе.")],
+        )
+
+    if target in env_admin_ids():
+        # Not ours to take: it comes from ADMIN_IDS. Pretending otherwise would
+        # show a revocation that the very next request silently undoes.
+        return await _admins_page(
+            request,
+            admin,
+            [
+                validation.error(
+                    "Цей доступ задано у файлі .env на сервері, тому звідси його "
+                    "не забрати. Приберіть ідентифікатор з ADMIN_IDS і "
+                    "перезапустіть бота."
+                )
+            ],
+        )
+
+    await configstore.remove_admin(target, admin.audit_name)
+    logger.info(f"{admin.audit_name} revoked access for {target}")
+    return RedirectResponse("/admins", status_code=303)
