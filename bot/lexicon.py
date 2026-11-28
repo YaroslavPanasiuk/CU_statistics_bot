@@ -86,17 +86,49 @@ class Lexicon(metaclass=_LexiconMeta):
         raising AttributeError on Lexicon.START_DATE for every single
         interaction -- a failure that looked like a dozen unrelated bugs.
         """
-        gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
-        sh = gc.open_by_url(config.GOOGLE_SHEET_CONFIG_URL)
-        worksheet = sh.get_worksheet(0)
+        for key, value in read_sheet_rows().items():
+            setattr(cls, key, value)
+            _sheet_keys.add(key)
 
-        for row in worksheet.get_all_values():
-            if len(row) >= 2:
-                raw_key, value = row[0], row[1]
-                clean_key = re.sub(r'\W+', '_', raw_key).strip('_').upper()
-                if clean_key:
-                    setattr(cls, clean_key, value)
-                    _sheet_keys.add(clean_key)
+
+def slugify_key(raw_key: str) -> str:
+    """The sheet's column A turned into a configuration key.
+
+    The only definition of this. deploy/migrate_config.py imports it rather
+    than repeating the expression: a migration that slugified even slightly
+    differently would store keys the bot then reports as missing.
+    """
+    return re.sub(r'\W+', '_', raw_key).strip('_').upper()
+
+
+def read_sheet_rows() -> dict[str, str]:
+    """Key to raw value, exactly as the config spreadsheet holds it."""
+    gc = gspread.service_account_from_dict(config.GOOGLE_CREDS)
+    sh = gc.open_by_url(config.GOOGLE_SHEET_CONFIG_URL)
+    worksheet = sh.get_worksheet(0)
+
+    rows: dict[str, str] = {}
+    for row in worksheet.get_all_values():
+        if len(row) >= 2:
+            key = slugify_key(row[0])
+            if key:
+                rows[key] = row[1]
+    return rows
+
+
+def sheet_mapping() -> dict[str, list[str]]:
+    """The config spreadsheet as the store holds it: key to ordered variants.
+
+    This is the shape migrate_config.py writes, so the ';;' convention is
+    understood in exactly one place.
+    """
+    mapping = {}
+    for key, raw in read_sheet_rows().items():
+        values = [part.strip() for part in raw.split(';;')]
+        values = [v for v in values if v]
+        if values:
+            mapping[key] = values
+    return mapping
 
 
 def variants(key: str) -> list[str]:
