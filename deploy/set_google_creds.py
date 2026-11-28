@@ -61,7 +61,15 @@ def main(argv: list[str]) -> int:
         return 1
 
     backup = env_path.with_suffix(env_path.suffix + f".bak-{key_path.stem[:12]}")
-    shutil.copy2(env_path, backup)
+    try:
+        shutil.copy2(env_path, backup)
+    except PermissionError:
+        # The deployed .env is root-owned on purpose. Say so plainly rather
+        # than showing a traceback for something that is not a fault.
+        print(f"FAIL: cannot write next to {env_path} — it is owned by")
+        print(f"      {env_path.owner()}:{env_path.group()}. Re-run this with sudo:")
+        print(f"      sudo {sys.executable} {' '.join(sys.argv)}")
+        return 1
 
     lines = env_path.read_text(encoding="utf-8").splitlines()
     line = f"{VAR}='{compact}'"
