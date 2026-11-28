@@ -127,14 +127,16 @@ class TestLogin:
 
 class TestTheLoginPageCannotBeMadeToSpeak:
     def test_a_known_code_shows_our_wording(self, client):
-        assert "Підпис Telegram не підтверджено." in client.get(
+        # Without the apostrophe: Jinja escapes it to &#39;, which is the
+        # point -- the page is escaped output, not raw text.
+        assert "signature did not check out" in client.get(
             "/login?error=bad_signature"
         ).text
 
     def test_an_arbitrary_message_is_not_reflected(self, client):
         """Otherwise a crafted link puts any sentence on a page that looks like
         ours -- 'введіть пароль тут' being the obvious one."""
-        crafted = "Введіть ваш пароль нижче"
+        crafted = "Enter your password below"
         response = client.get("/login", params={"error": crafted})
         assert crafted not in response.text
         assert webapp.GENERIC_LOGIN_ERROR in response.text

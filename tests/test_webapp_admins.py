@@ -256,7 +256,7 @@ class TestInviting:
             "/admins/invite",
             data={"username": "granted", "csrf": csrf_of(client)},
         )
-        assert "уже має доступ" in response.text
+        assert "already has access" in response.text
         assert store.calls == []
 
     def test_inviting_the_same_handle_twice_is_refused(self, client, store):
@@ -271,7 +271,7 @@ class TestInviting:
             "/admins/invite",
             data={"username": "@OLHA_K", "csrf": csrf_of(client)},
         )
-        assert "уже запрошено" in response.text
+        assert "already invited" in response.text
         assert store.calls == []
 
     def test_a_missing_csrf_token_is_refused(self, client, store):
@@ -313,7 +313,7 @@ class TestRevoking:
             data={"tg_id": str(GRANTED_ADMIN), "csrf": csrf_of(client)},
         )
         assert response.status_code == 200
-        assert "у себе" in response.text
+        assert "your own access" in response.text
         assert store.calls == []
 
     def test_an_env_admin_cannot_be_revoked_here(self, client, store):

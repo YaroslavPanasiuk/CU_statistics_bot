@@ -4,16 +4,23 @@
    Two faces, with one job each. PT Serif carries what the bot says; PT Sans
    carries what this tool says. Both are designed for Cyrillic and come from
    the system, so nothing is fetched over the network -- which also means the
-   Content-Security-Policy can forbid every other origin. */
+   Content-Security-Policy can forbid every other origin.
+
+   One committed theme, dark. There is no toggle and no prefers-color-scheme
+   branch on purpose: a tool with three pages does not need two palettes to
+   keep in step, and following the operating system would mean half the people
+   who open this see a light page nobody designed. */
 
 :root {
-  --paper:  #eceff1;
-  --sheet:  #f7f9fa;
-  --ink:    #16263a;
-  --slate:  #5c6e80;
-  --rule:   #ccd6dd;
-  --ochre:  #b07503;
-  --danger: #9b2c2c;
+  --paper:  #0f151c;  /* page ground */
+  --sheet:  #161f29;  /* panels and the top bar */
+  --field:  #0b1016;  /* inputs, recessed below the panel */
+  --ink:    #dfe7ee;  /* body text, and the fill of a primary button */
+  --ink-up: #ffffff;  /* a primary button under the cursor */
+  --slate:  #8ba0b4;  /* secondary text; passes AA on both grounds above */
+  --rule:   #2a3744;
+  --ochre:  #d99c33;  /* the one accent: focus, current page, a warning */
+  --danger: #e8837a;
 
   --serif: "PT Serif", "Noto Serif", "Liberation Serif", Georgia, serif;
   --sans:  "PT Sans", "Noto Sans", "Liberation Sans", "Segoe UI", system-ui, sans-serif;
@@ -22,6 +29,10 @@
   --measure: 66ch;
   --gutter: 2.75rem;
 }
+
+/* Form controls inherit the browser's light defaults otherwise -- a white
+   dropdown on a dark panel, and an unreadable date picker. */
+:root { color-scheme: dark; }
 
 *, *::before, *::after { box-sizing: border-box; }
 
@@ -186,7 +197,7 @@ code { font-family: var(--mono); font-size: 0.78em; }
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--rule);
   border-radius: 3px;
-  background: #fff;
+  background: var(--field);
   color: var(--ink);
   font: inherit;
 }
@@ -202,12 +213,12 @@ code { font-family: var(--mono); font-size: 0.78em; }
   border: 1px solid var(--ink);
   border-radius: 3px;
   background: var(--ink);
-  color: var(--sheet);
+  color: var(--paper);
   font: inherit;
   cursor: pointer;
 }
 
-.button:hover { background: #0f1b2a; }
+.button:hover { background: var(--ink-up); border-color: var(--ink-up); }
 
 .button--quiet {
   border-color: var(--rule);

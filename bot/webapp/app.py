@@ -42,21 +42,25 @@ templates = Jinja2Templates(directory=str(HERE / "templates"))
 #: What the login page says for each AuthError code. The wording lives here,
 #: never in the URL, so a crafted link cannot put words on a page that looks
 #: like ours.
+#:
+#: These are in English while the rest of the page is Ukrainian, deliberately:
+#: an error here is almost always something to fix on the server or in
+#: BotFather, and the person reading it is whoever is being called to fix it.
 LOGIN_ERRORS = {
-    "no_signature": "Відповідь Telegram не містить підпису. Спробуйте ще раз.",
-    "empty": "Відповідь Telegram порожня. Спробуйте ще раз.",
-    "bad_signature": "Підпис Telegram не підтверджено.",
-    "bad_date": "Некоректна дата входу.",
-    "stale": "Термін дії входу вичерпано. Спробуйте ще раз.",
-    "clock": "Дата входу в майбутньому — перевірте годинник.",
-    "bad_id": "Некоректний ідентифікатор користувача.",
+    "no_signature": "Telegram's reply carried no signature. Try again.",
+    "empty": "Telegram's reply was empty. Try again.",
+    "bad_signature": "Telegram's signature did not check out.",
+    "bad_date": "The sign-in timestamp was unreadable.",
+    "stale": "That sign-in has expired. Use the Telegram button again.",
+    "clock": "The sign-in is dated in the future — check the server clock.",
+    "bad_id": "The Telegram account id was unreadable.",
     "not_admin": (
-        "Цей акаунт не має доступу до налаштувань. Попросіть адміністратора "
-        "додати ваш нік у Telegram."
+        "This account cannot edit the configuration. Ask an admin to add your "
+        "Telegram username."
     ),
-    "not_configured": "Вхід не налаштовано на сервері.",
+    "not_configured": "Sign-in is not configured on the server.",
 }
-GENERIC_LOGIN_ERROR = "Не вдалося увійти. Спробуйте ще раз."
+GENERIC_LOGIN_ERROR = "Could not sign you in. Try again."
 
 # No docs and no schema endpoint: /openapi.json is served by default even when
 # docs_url is disabled, and it publishes the whole route map to anyone.
@@ -191,7 +195,7 @@ async def index(request: Request, admin: SignedIn):
 
 # ------------------------------------------------------------------ admins --
 
-STALE_FORM = "Форма застаріла. Відкрийте сторінку заново."
+STALE_FORM = "This form is out of date. Reload the page and try again."
 
 
 async def _admins_page(
@@ -285,7 +289,7 @@ async def revoke_admin(
     try:
         target = int(tg_id)
     except ValueError:
-        raise HTTPException(status_code=400, detail="Некоректний ідентифікатор.") from None
+        raise HTTPException(status_code=400, detail="That is not a valid id.") from None
 
     if target == admin.tg_id:
         # Letting this through locks the person out mid-session, and the only
@@ -293,7 +297,7 @@ async def revoke_admin(
         return await _admins_page(
             request,
             admin,
-            [validation.error("Не можна забрати доступ у себе.")],
+            [validation.error("You cannot revoke your own access.")],
         )
 
     if target in env_admin_ids():
@@ -304,9 +308,9 @@ async def revoke_admin(
             admin,
             [
                 validation.error(
-                    "Цей доступ задано у файлі .env на сервері, тому звідси його "
-                    "не забрати. Приберіть ідентифікатор з ADMIN_IDS і "
-                    "перезапустіть бота."
+                    "This access comes from ADMIN_IDS in .env on the server, so it "
+                    "cannot be taken away here. Remove the id from ADMIN_IDS and "
+                    "restart the bot."
                 )
             ],
         )

@@ -4,6 +4,10 @@ A problem is either an error, which blocks the save, or a warning, which is
 shown and then obeyed if the editor insists. The split exists because some
 things are certainly wrong -- a date that does not parse -- and some are only
 probably wrong, and a tool that refuses the second kind gets worked around.
+
+Messages are in English even though the pages are Ukrainian: a problem here is
+about the configuration rather than about the bot's words, and English is what
+the rest of the project's operational text uses.
 """
 
 import re
@@ -48,17 +52,20 @@ def check_username(
     payload.
     """
     if not handle:
-        return [error("Вкажіть нік у Telegram, наприклад @olha_k.")]
+        return [error("Enter a Telegram username, for example @olha_k.")]
     if not USERNAME_PATTERN.match(handle):
         return [
             error(
-                "Нік у Telegram складається з 5–32 латинських літер, цифр і "
-                "підкреслень та починається з літери. Перевірте, чи це справді "
-                "нік, а не ім’я."
+                "A Telegram username is 5–32 Latin letters, digits and "
+                "underscores, starting with a letter. Check that this is the "
+                "username and not the display name."
             )
         ]
     if already_admin:
-        return [error(f"@{handle} уже має доступ.")]
+        return [error(f"@{handle} already has access.")]
     if already_invited:
-        return [error(f"@{handle} уже запрошено. Запрошення чекає на перший вхід.")]
+        return [
+            error(f"@{handle} is already invited — the invitation is waiting "
+                  "for their first sign-in.")
+        ]
     return []
