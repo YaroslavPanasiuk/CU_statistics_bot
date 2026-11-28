@@ -16,3 +16,16 @@ __pycache__/
 # Tool caches
 .pytest_cache/
 .ruff_cache/
+
+# Any .env variant, not just .env itself: set_google_creds.py writes a backup
+# beside it, and that backup holds the key being replaced.
+.env.*
+!.env.example
+
+# Google service-account keys. These arrive as a download named after the
+# project, so the pattern matches the shape rather than one filename -- the
+# next one will be called something else and must not be committed either.
+*.json
+!.vscode/*.json
+!tests/**/*.json
+service-account*.json.example
