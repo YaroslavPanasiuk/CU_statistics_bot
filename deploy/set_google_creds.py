@@ -38,6 +38,21 @@ def main(argv: list[str]) -> int:
     if not env_path.is_file():
         print(f"FAIL: no such .env: {env_path}")
         return 1
+    try:
+        with env_path.open("r+", encoding="utf-8"):
+            pass
+    except PermissionError:
+        # The deployed .env is root-owned on purpose, so an unprivileged run is
+        # the expected first attempt, not a fault. Checked here rather than at
+        # the write: the directory is group-writable, so the backup copy
+        # succeeds and only the rewrite fails -- which left a traceback and a
+        # stray backup holding the key being replaced.
+        print(f"FAIL: {env_path} is owned by {env_path.owner()}:{env_path.group()} "
+              "and is not writable by you.")
+        print("      Re-run with sudo:")
+        print(f"      sudo {sys.executable} {Path(sys.argv[0]).resolve()} "
+              f"{' '.join(sys.argv[1:])}")
+        return 1
 
     try:
         creds = json.loads(key_path.read_text(encoding="utf-8"))
@@ -61,15 +76,7 @@ def main(argv: list[str]) -> int:
         return 1
 
     backup = env_path.with_suffix(env_path.suffix + f".bak-{key_path.stem[:12]}")
-    try:
-        shutil.copy2(env_path, backup)
-    except PermissionError:
-        # The deployed .env is root-owned on purpose. Say so plainly rather
-        # than showing a traceback for something that is not a fault.
-        print(f"FAIL: cannot write next to {env_path} — it is owned by")
-        print(f"      {env_path.owner()}:{env_path.group()}. Re-run this with sudo:")
-        print(f"      sudo {sys.executable} {' '.join(sys.argv)}")
-        return 1
+    shutil.copy2(env_path, backup)
 
     lines = env_path.read_text(encoding="utf-8").splitlines()
     line = f"{VAR}='{compact}'"
