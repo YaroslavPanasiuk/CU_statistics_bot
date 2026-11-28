@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block title %}Налаштування{% endblock %} · Статистика ЦУ</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+{% if admin is defined and admin %}
+<header class="bar">
+  <a class="bar__home" href="/">Налаштування бота</a>
+  <nav class="bar__nav">
+    <a href="/" {% if active == 'config' %}aria-current="page"{% endif %}>Тексти</a>
+  </nav>
+  <span class="bar__who">{{ admin.display_name }}</span>
+  <a class="bar__out" href="/logout">Вийти</a>
+</header>
+{% endif %}
+<main class="page">
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,4 +1,9 @@
 -r requirements.txt
+# The web UI's dependencies are dev dependencies too: its tests run in the same
+# suite, and a web change that breaks the bot's imports should fail there.
+-r requirements-web.txt
 pytest==8.4.2
 pytest-asyncio==1.3.0
+# Required by starlette's TestClient, which is how the web routes are tested.
+httpx==0.28.1
 ruff==0.14.5

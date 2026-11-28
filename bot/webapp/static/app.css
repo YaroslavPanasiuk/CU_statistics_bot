@@ -1,0 +1,111 @@
+/* The bot's words are the content here, so they are set as a script: a cue in
+   the left gutter, the line itself, and a stage direction underneath.
+
+   Two faces, with one job each. PT Serif carries what the bot says; PT Sans
+   carries what this tool says. Both are designed for Cyrillic and come from
+   the system, so nothing is fetched over the network -- which also means the
+   Content-Security-Policy can forbid every other origin. */
+
+:root {
+  --paper:  #eceff1;
+  --sheet:  #f7f9fa;
+  --ink:    #16263a;
+  --slate:  #5c6e80;
+  --rule:   #ccd6dd;
+  --ochre:  #b07503;
+  --danger: #9b2c2c;
+
+  --serif: "PT Serif", "Noto Serif", "Liberation Serif", Georgia, serif;
+  --sans:  "PT Sans", "Noto Sans", "Liberation Sans", "Segoe UI", system-ui, sans-serif;
+  --mono:  "DejaVu Sans Mono", "Liberation Mono", ui-monospace, monospace;
+
+  --measure: 66ch;
+  --gutter: 2.75rem;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+a { color: inherit; }
+a:focus-visible,
+[href]:focus-visible { outline: 2px solid var(--ochre); outline-offset: 3px; }
+
+code { font-family: var(--mono); font-size: 0.78em; }
+
+/* ---------------------------------------------------------------- top bar -- */
+
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 1.25rem;
+  padding: 0.9rem 1.5rem;
+  border-bottom: 1px solid var(--rule);
+  background: var(--sheet);
+}
+
+.bar__home {
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.bar__nav { display: flex; gap: 1rem; margin-right: auto; }
+.bar__nav a { color: var(--slate); text-decoration: none; }
+.bar__nav a:hover { color: var(--ink); }
+.bar__nav a[aria-current="page"] {
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ochre);
+}
+
+.bar__who { color: var(--slate); }
+.bar__out { color: var(--slate); text-decoration: underline; text-underline-offset: 2px; }
+
+/* ------------------------------------------------------------------ page -- */
+
+.page {
+  max-width: calc(var(--measure) + var(--gutter) + 3rem);
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem 6rem;
+}
+
+.meta { color: var(--slate); font-size: 0.9rem; }
+
+/* ------------------------------------------------------------- login page -- */
+
+.gate { max-width: var(--measure); }
+
+.gate__title {
+  margin: 0 0 0.75rem;
+  font-family: var(--serif);
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.gate__lede {
+  margin: 0 0 2rem;
+  color: var(--slate);
+  font-size: 1.05rem;
+}
+
+.gate__error {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--danger);
+  background: var(--sheet);
+  color: var(--danger);
+}
+
+.gate__widget { min-height: 3rem; }

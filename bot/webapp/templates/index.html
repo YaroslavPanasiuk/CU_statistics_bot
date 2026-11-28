@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Тексти{% endblock %}
+{% set active = 'config' %}
+
+{% block content %}
+<h1 class="gate__title">Вітаю, {{ admin.display_name }}</h1>
+<p class="gate__lede">
+  Вхід працює. Сторінки з текстами, розкладом і доступами з’являться далі.
+</p>
+<p class="meta">Версія конфігурації: {{ config_version }}</p>
+{% endblock %}
