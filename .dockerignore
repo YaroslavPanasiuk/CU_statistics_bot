@@ -1,0 +1,18 @@
+# The build context is the whole repo, so everything that is large or
+# machine-specific is kept out of it. .env in particular: secrets are passed at
+# run time with --env-file, never baked into an image layer.
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+.git/
+.github/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+tests/
+*.sql
+*.md
+!README.md

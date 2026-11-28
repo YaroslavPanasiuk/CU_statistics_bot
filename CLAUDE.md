@@ -19,7 +19,20 @@ CWD-relative path, so the bot only works when launched from the repo root.
 
 **Deployment**: a systemd unit `CU_statistics_bot.service` on the `lvivhp` host
 (`/home/yaros/Projects/CU_statistics_bot`, venv at `venv/`, `Restart=always`),
-with Postgres local to the same box. Deploys are `git pull` + `systemctl restart`.
+with Postgres in a container (`Postgrees-custat`) on the same box, published on
+`127.0.0.1:5433` only. Deploys are `git pull` + `systemctl restart`.
+
+**The web UI** (`bot/webapp/`) runs as its own container, `deploy/run-web.sh`,
+reachable at `https://custat.yarosiuk.duckdns.org` through the shared Caddy in
+`~/forgejo/Caddyfile`. It is never published on a host port: Caddy reaches it
+over a Docker network, which is also why the container joins **two** — `custat_net`
+to reach Postgres by container name (the host's `127.0.0.1` is the container's
+own loopback) and Caddy's network so the proxy can resolve it. Requirements are
+`requirements-web.txt`; `requirements-dev.txt` includes them so the web tests
+run in the same suite.
+
+The login widget needs `BOT_USERNAME` (`CU_statistics_bot`) and the domain
+registered with BotFather `/setdomain`; it refuses to render anywhere else.
 
 Config comes from `.env` (see `.env.example`): `BOT_TOKEN`, `ADMIN_IDS`
 (comma-separated), `DATABASE_URL` (async Postgres DSN, e.g.
@@ -75,6 +88,14 @@ reading several files to work out.
    `POLL_SECONDS` (30) without a restart. `/reload_config` does it immediately.
    `deploy/check_config.py` reports every gap at once, reading whichever source
    the bot would read, and exits non-zero.
+
+   `deploy/migrate_config.py` is the one-way copy from sheet to database. It is
+   a dry run unless given `--write`, validates the candidate before writing,
+   refuses a sheet that yielded no keys at all, and needs `--force` to
+   overwrite values that differ — the sheet is frozen in time and the database
+   is not, so a second import would otherwise discard every web UI edit. Keys
+   the registry does not describe are skipped, since the UI can only show
+   described ones.
 2. **Data spreadsheet** (`GOOGLE_SHEET_URL`) — the roster (non-empty column B
    from row 3) plus the per-week answer grid. Only the single tab named by
    `Lexicon.WORKSHEET_NAME` is ever touched. The other tabs in that

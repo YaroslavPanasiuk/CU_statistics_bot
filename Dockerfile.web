@@ -1,0 +1,32 @@
+# The configuration web UI. A separate container from the bot, which runs as a
+# systemd service on the host, so a fault here cannot take the bot offline. The
+# two share only the Postgres database.
+#
+# Debian slim rather than Alpine: asyncpg and greenlet install from manylinux
+# wheels here, where musl would want a compiler in the image.
+FROM docker.io/library/python:3.13-slim
+
+RUN useradd --create-home --uid 10001 web
+
+WORKDIR /app
+
+COPY requirements.txt requirements-web.txt ./
+RUN pip install --no-cache-dir -r requirements-web.txt
+
+COPY --chown=web:web . .
+
+USER web
+
+EXPOSE 8000
+
+# /healthz answers without authentication and reports whether the database is
+# reachable, which is the only thing that can be wrong here on its own.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=4).status==200 else 1)"
+
+# --proxy-headers so request URLs are right behind Caddy; without it the login
+# redirect would come back as http and the Secure cookie would be dropped.
+# One worker is plenty: a handful of editors, and every write is a single
+# statement in Postgres.
+CMD ["uvicorn", "bot.webapp.app:app", "--host", "0.0.0.0", "--port", "8000", \
+     "--workers", "1", "--proxy-headers", "--forwarded-allow-ips", "*"]
