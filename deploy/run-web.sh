@@ -31,14 +31,28 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
+# Read .env through the shell, not with --env-file: docker passes the file
+# verbatim, so ADMIN_IDS="1,2" arrives with the quotation marks still attached
+# and the config refuses to start on a non-numeric id. Sourcing strips them the
+# same way systemd and python-dotenv do for the bot.
+set -a
+. ./.env
+set +a
+
 # The bot connects to Postgres on 127.0.0.1:5433. Inside a container that is
 # the container's own loopback, so the host and port are rewritten to the
-# database container's name on the shared network. Everything else in .env --
-# the token, the admin ids, the credentials -- is passed through untouched.
-DB_URL=$(grep -E '^DATABASE_URL=' .env | cut -d= -f2- | tr -d '"' \
-    | sed -E "s#@[^/]+/#@${DB_CONTAINER}:5432/#")
+# database container's name on the shared network.
+DB_URL=$(printf '%s' "${DATABASE_URL:-}" | sed -E "s#@[^/]+/#@${DB_CONTAINER}:5432/#")
 if [ -z "$DB_URL" ]; then
     echo "error: DATABASE_URL is not set in .env" >&2
+    exit 1
+fi
+if [ -z "${BOT_TOKEN:-}" ]; then
+    echo "error: BOT_TOKEN is not set in .env; logins cannot be verified" >&2
+    exit 1
+fi
+if [ -z "${ADMIN_IDS:-}" ]; then
+    echo "error: ADMIN_IDS is not set in .env; nobody could sign in" >&2
     exit 1
 fi
 
@@ -61,12 +75,18 @@ if [ -n "$(docker ps -aq --filter "name=^${NAME}\$")" ]; then
     docker rm -f "$NAME" > /dev/null
 fi
 
+# An explicit list rather than the whole file. The web UI never reads or
+# writes a spreadsheet, so it has no business holding GOOGLE_CREDS_JSON -- the
+# service-account key that can edit the roster and every volunteer's answers.
 docker run \
     --detach \
     --name "$NAME" \
-    --env-file .env \
     --env "DATABASE_URL=$DB_URL" \
+    --env "BOT_TOKEN=$BOT_TOKEN" \
+    --env "ADMIN_IDS=$ADMIN_IDS" \
     --env "BOT_USERNAME=${BOT_USERNAME:-$DEFAULT_BOT_USERNAME}" \
+    --env "SESSION_SECRET=${SESSION_SECRET:-}" \
+    --env "TZ=${TZ:-Europe/Kyiv}" \
     --restart unless-stopped \
     --network "$DB_NETWORK" \
     "$NAME" > /dev/null
