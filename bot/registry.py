@@ -118,6 +118,13 @@ class Field:
     #: Reached by a computed name (f"REMINDER{level}"), so the key never
     #: appears literally in the source and a scan cannot find it.
     dynamic: bool = False
+    #: Sent with parse_mode="HTML", so Telegram parses the markup and rejects
+    #: the whole message if it does not parse. Almost nothing is: the
+    #: volunteer-facing handlers call message.answer() with no parse_mode, so
+    #: their text is plain. Reminders are the exception -- REMINDER3 carries an
+    #: <a href> to the spreadsheet -- and a stray '<' there means every
+    #: volunteer's reminder fails to send.
+    html: bool = False
     aliases: tuple[str, ...] = field(default=(), repr=False)
 
 
@@ -246,19 +253,19 @@ FIELDS: tuple[Field, ...] = (
         "Нагадування 1 (17:00)",
         "Перше нагадування щонеділі, тим, у кого рядок за цей тиждень ще "
         "порожній. {0} — ім'я.",
-        placeholders=("{0}",), variants=True, dynamic=True,
+        placeholders=("{0}",), variants=True, dynamic=True, html=True,
     ),
     Field(
         "REMINDER2", Kind.TEMPLATE, Group.REMINDERS,
         "Нагадування 2 (19:00)",
         "Друге нагадування, якщо статистики досі немає. {0} — ім'я.",
-        placeholders=("{0}",), variants=True, dynamic=True,
+        placeholders=("{0}",), variants=True, dynamic=True, html=True,
     ),
     Field(
         "REMINDER3", Kind.TEMPLATE, Group.REMINDERS,
         "Нагадування 3 (21:00)",
         "Останнє нагадування за тиждень. {0} — ім'я.",
-        placeholders=("{0}",), variants=True, dynamic=True,
+        placeholders=("{0}",), variants=True, dynamic=True, html=True,
     ),
 
     # -------------------------------------------------------------- service --

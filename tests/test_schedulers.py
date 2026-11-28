@@ -108,6 +108,22 @@ class TestSendWeeklyReminder:
         _, text = bot.sent[0]
         assert "Волонтер" in text
 
+    async def test_a_name_with_html_in_it_is_escaped(self, monkeypatch, roster):
+        """Reminders are the one volunteer-facing message sent with
+        parse_mode="HTML", because REMINDER3 links to the spreadsheet. An
+        unescaped '&' in a roster name would make Telegram refuse the whole
+        message, so that one person would silently never be reminded."""
+        monkeypatch.setattr(
+            schedulers, "display_name", lambda _: "Ivan & Co <test>"
+        )
+        bot = FakeBot()
+        await schedulers.send_weekly_reminder(bot, 1)
+
+        _, text = bot.sent[0]
+        assert "&amp;" in text
+        assert "&lt;test&gt;" in text
+        assert "& Co <test>" not in text
+
     async def test_a_blocked_user_is_reported_not_raised(self, roster):
         bot = FakeBot(fail={111: TelegramForbiddenError(method=None, message="blocked")})
         await schedulers.send_weekly_reminder(bot, 1)

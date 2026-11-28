@@ -1,3 +1,4 @@
+import html
 import logging
 import asyncio
 from datetime import datetime
@@ -55,9 +56,14 @@ async def resolve_recipients(level: int, user_ids=None) -> list[database.User]:
 
 
 async def send_reminder_to(bot: Bot, user: database.User, level: int) -> None:
+    # The name is escaped because this is the one volunteer-facing message sent
+    # with parse_mode="HTML" -- REMINDER3 carries an <a href> to the
+    # spreadsheet. A roster name containing '&' or '<' would otherwise make
+    # Telegram refuse the whole message, so that one person would silently
+    # never get a reminder.
     await bot.send_message(
         user.tg_id,
-        fill(f"REMINDER{level}", display_name(user.full_name)),
+        fill(f"REMINDER{level}", html.escape(display_name(user.full_name))),
         reply_markup=get_main_menu_keyboard(),
         parse_mode="HTML",
     )
