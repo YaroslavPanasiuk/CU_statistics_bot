@@ -376,3 +376,39 @@ class TestExport:
             base_url="https://testserver",
         ) as anon:
             assert (await anon.get("/export.json")).status_code == 307
+
+
+class TestKeysNothingReads:
+    """migrate_config.py imports Group.UNUSED keys, because after the cutover
+    the database is the only copy of the old wording. So they have to be
+    visible: a stored value nobody can see is a stored value nobody can clean
+    up -- the same trap as a key the registry does not describe."""
+
+    async def test_an_unused_key_with_a_value_is_shown(self, client):
+        unused = next(f for f in registry.FIELDS if f.group is registry.Group.UNUSED)
+        await configstore.set_variants(unused.key, ["Старе формулювання"], "test")
+
+        page = (await client.get("/")).text
+        assert "Старе формулювання" in page
+        assert registry.GROUP_LABELS_UK[registry.Group.UNUSED] in page
+
+    async def test_it_is_read_only(self, client):
+        unused = next(f for f in registry.FIELDS if f.group is registry.Group.UNUSED)
+        await configstore.set_variants(unused.key, ["Старе формулювання"], "test")
+
+        page = (await client.get("/")).text
+        assert f'href="/edit/{unused.key}"' not in page
+        assert "Бот нічого з цього не читає" in page
+
+    async def test_an_unused_key_with_no_value_is_not_listed_at_all(self, client):
+        """Dozens of empty rows reading "not set" for keys nothing reads would
+        bury the section that matters."""
+        page = (await client.get("/")).text
+        assert registry.GROUP_LABELS_UK[registry.Group.UNUSED] not in page
+
+    async def test_it_is_still_in_the_backup(self, client):
+        unused = next(f for f in registry.FIELDS if f.group is registry.Group.UNUSED)
+        await configstore.set_variants(unused.key, ["Старе формулювання"], "test")
+        assert (await client.get("/export.json")).json()[unused.key] == [
+            "Старе формулювання"
+        ]

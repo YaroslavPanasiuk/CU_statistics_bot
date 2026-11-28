@@ -402,8 +402,6 @@ async def index(request: Request, admin: SignedIn, saved: str | None = None):
     live = await _live()
     groups = []
     for group in registry.Group:
-        if group is registry.Group.UNUSED:
-            continue
         fields = [
             _entry(f, live.get(f.key, []))
             for f in registry.fields_in_group(group)
@@ -412,6 +410,15 @@ async def index(request: Request, admin: SignedIn, saved: str | None = None):
                 (live.get("QUESTION_PATTERN") or ["0"])[0]
             )
         ]
+        # The unused group is shown, but read-only and last. Hiding it would
+        # be worse than either alternative: migrate_config.py imports those
+        # keys, because after the cutover the database is the only copy of the
+        # old wording -- and a stored value nobody can see is a stored value
+        # nobody can clean up. Editing text the bot never reads is pointless,
+        # so there is no link, and the values are in /export.json either way.
+        unused = group is registry.Group.UNUSED
+        if unused:
+            fields = [entry for entry in fields if not entry["missing"]]
         if fields:
             groups.append(
                 {
@@ -419,6 +426,7 @@ async def index(request: Request, admin: SignedIn, saved: str | None = None):
                     "label": registry.GROUP_LABELS_UK[group],
                     "help": registry.GROUP_HELP_UK.get(group, ""),
                     "fields": fields,
+                    "read_only": unused,
                 }
             )
     return templates.TemplateResponse(

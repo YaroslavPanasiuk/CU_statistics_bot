@@ -20,16 +20,23 @@
 {% endif %}
 
 {% for group in groups %}
-<section class="group">
+<section class="group{% if group.read_only %} group--quiet{% endif %}">
   <h2 class="group__title">{{ group.label }}</h2>
-  {% if group.help %}<p class="group__help">{{ group.help }}</p>{% endif %}
+  {% if group.read_only %}
+  <p class="group__help">
+    Бот нічого з цього не читає. Збережено, щоб старі формулювання не
+    загубилися — редагувати немає сенсу, а завантажити їх можна в резервній копії.
+  </p>
+  {% elif group.help %}<p class="group__help">{{ group.help }}</p>{% endif %}
 
   <ul class="lines">
     {% for entry in group.fields %}
     <li class="line" id="{{ entry.field.key }}">
       <div class="line__head">
         <span class="line__label">{{ entry.field.label_uk }}</span>
+        {% if not group.read_only %}
         <a class="line__edit" href="/edit/{{ entry.field.key }}">Змінити</a>
+        {% endif %}
       </div>
       {% if entry.missing %}
       <p class="line__missing">Не задано — бот скаже вбудований текст або не запуститься.</p>

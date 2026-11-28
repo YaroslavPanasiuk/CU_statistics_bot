@@ -423,3 +423,8 @@ code { font-family: var(--mono); font-size: 0.78em; }
 
 .change__who { margin-left: auto; color: var(--slate); font-size: 0.86rem; }
 .change__gone { margin: 0; color: var(--danger); }
+
+/* Kept, not used. Set back so it reads as an appendix rather than as part of
+   the script the bot actually performs. */
+.group--quiet { opacity: 0.72; }
+.group--quiet .line__said { font-size: 0.97rem; border-left-style: dotted; }
